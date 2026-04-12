@@ -1,0 +1,25 @@
+from fastapi import Request, HTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
+import os
+
+API_KEYS = os.getenv("API_KEYS", "dev-key").split(",")
+MCP_API_KEYS = os.getenv("MCP_API_KEY", "dev-mcp-key").split(",")
+PUBLIC_ENDPOINTS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc"}
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in PUBLIC_ENDPOINTS or request.method == "OPTIONS":
+            return await call_next(request)
+
+        if request.url.path.startswith("/mcp/"):
+            key = request.headers.get("X-MCP-API-Key", "")
+            if key not in MCP_API_KEYS:
+                raise HTTPException(401, "Invalid MCP API key")
+            return await call_next(request)
+
+        key = request.headers.get("X-API-Key", "")
+        if key not in API_KEYS:
+            raise HTTPException(401, "Invalid API key")
+
+        return await call_next(request)

@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Node
+node_modules/
+dist/
+.next/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+
+# ChromaDB
+chroma_data/
+
+# Neo4j
+neo4j_data/
+
+# Redis
+redis_data/
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# Build
+build/
+*.pyc
