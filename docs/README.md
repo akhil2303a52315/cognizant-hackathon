@@ -515,21 +515,28 @@ SupplyChainGPT uses OR-Tools for actionable planning under constraints.
 ```
 frontend/
 src/
-├── pages/          → Dashboard.tsx, Chat.tsx, Debate.tsx, Brand.tsx
-├── components/     → Navbar.tsx, AgentCard.tsx, DebateTimeline.tsx, ModalFallbacks.tsx, etc.
-├── lib/            → api.ts (axios/FastAPI calls), socket.ts
-├── store/          → zustand store for current query & council state
-├── hooks/          → useCouncilQuery.ts, useWebSocket.ts
+├── pages/          → Dashboard.tsx, Chat.tsx, Debate.tsx, Brand.tsx, Settings.tsx, NotFound.tsx
+├── components/
+│   ├── layout/     → Navbar.tsx (server health indicator, settings link)
+│   └── shared/     → ConfidenceBar.tsx, StatusBadge.tsx, LoadingSkeleton.tsx,
+│                     Toast.tsx, ThemeToggle.tsx, MarkdownRenderer.tsx
+├── lib/            → api.ts (axios + interceptors), socket.ts (native WebSocket)
+├── store/          → councilStore.ts, settingsStore.ts (persisted), ragStore.ts, navStore.ts
+├── hooks/          → useCouncilQuery.ts, useCouncilStream.ts, useWebSocket.ts,
+│                     useRAGQuery.ts, useMCPTools.ts
+├── types/          → council.ts, rag.ts, mcp.ts, api.ts, risk.ts
 ├── assets/         → icons, images
-├── App.tsx         → Router setup with 4 routes + outlet
+├── App.tsx         → Router (6 routes + 404) + QueryClientProvider + ToastContainer
+└── index.css       → shadcn-compatible CSS variables, dark mode tokens
 ```
 
 ### Day-by-Day Frontend Build (Within 9-Day Plan)
-- **Day 7 Morning**: Setup Vite + React Router + Tailwind + shadcn/ui. Create 4 page skeletons + Navbar
-- **Day 7 Afternoon**: Implement Dashboard (heatmap + stats) + Chat page with input
-- **Day 8 Morning**: Debate page with timeline + charts + modals for Audit/Fallback
-- **Day 8 Afternoon**: Brand page + Settings modal + WebSocket integration
-- **Day 9**: Polish (responsive, loading states, dark theme, export buttons) + connect to backend + test on AWS
+- **Day 5 Afternoon** ✅: Vite + React 18 + TS scaffold. Tailwind config with brand colors + shadcn tokens. Type definitions, API client, WebSocket client, Zustand stores, custom hooks, Navbar, shared components, 5 page routes + 404, Vite proxy config. Production build passes with zero TS errors.
+- **Day 7 Morning**: Implement Dashboard (heatmap + stats) + Chat page with streaming input
+- **Day 7 Afternoon**: Debate page with timeline + charts + modals for Audit/Fallback
+- **Day 8 Morning**: Brand page polish + Settings page + WebSocket integration
+- **Day 8 Afternoon**: Polish (responsive, loading states, dark theme, export buttons) + connect to backend
+- **Day 9**: Final polish, deployment, testing on AWS
 
 ### UI/UX Best Practices for Judges
 - Minimalist dark theme (blue-purple accents matching Cognizant branding)
@@ -567,7 +574,7 @@ Use this scenario in presentations and end-to-end demo:
 | 2 | Apr 13 | Core LangGraph Council (7 Agents) | Rohith | Fully working 7-agent Council with parallel execution, checkpointer (Postgres + Redis), basic ReAct loops, LangSmith traces |
 | 3 | Apr 14 | Agentic RAG Integration | Akhil | Agentic RAG + Graph RAG on Neo4j integrated into all 7 agents |
 | 4 | Apr 15 | MCP Tool Integration | Akhil | MCP servers + secure tool calling in every agent |
-| 5 | Apr 16 | Debate Engine + Predictions + Brand Agent | Rohith + Akhil | Complete Debate Engine, Predictions, Brand Agent, Fallbacks, end-to-end Council flow |
+| 5 | Apr 16 | Debate Engine + Predictions + Brand Agent + Frontend Foundation | Rohith + Akhil | ✅ Complete Debate Engine, Predictions, Brand Agent, Fallbacks, WebSocket, PDF Export, Firecrawl MCP, Frontend scaffold (Phase 6: 100%) |
 | 6 | Apr 17 | Backend API + Observability | Rohith + Akhil | Production-ready FastAPI endpoints, LangSmith + Prometheus observability, human-in-loop, full integration tests |
 | 7 | Apr 18 | React Frontend Dashboard (4-Page SPA) | Aishwarya + Poojitha | Complete 4-page React SPA + all Radix modals + WebSocket integration |
 | 8 | Apr 19 | Production Polish & Security | ALL 4 Members | Security hardening, cost optimization, UI polish, full integration, performance tuning, export features |
@@ -614,11 +621,31 @@ Aishwarya & Poojitha hand off to All 4 (Day 8 & 9) → final polish, security, d
    ├── agents/
    ├── rag/
    ├── mcp/
-   ├── tools/
-   ├── api.py
+   ├── tools/        → pdf_export.py, ...
+   ├── ws/           → server.py, events.py
+   ├── routes/       → council.py, risk.py, rag.py, ...
+   ├── middleware/   → auth.py, rate_limit.py, error_handler.py
+   ├── db/           → neon.py, redis_client.py, neo4j_client.py
+   ├── config.py
    ├── graph.py
    ├── state.py
-   frontend/ (empty for now)
+   ├── main.py
+   frontend/
+   ├── src/
+   │   ├── pages/       → Dashboard, Chat, Debate, Brand, Settings, NotFound
+   │   ├── components/  → layout/Navbar, shared/ (6 components)
+   │   ├── lib/         → api.ts, socket.ts
+   │   ├── store/       → 4 Zustand stores
+   │   ├── hooks/       → 5 custom hooks
+   │   ├── types/       → 5 type definition files
+   │   └── App.tsx      → Router + QueryClient + Toast
+   ├── tailwind.config.js
+   ├── vite.config.ts
+   └── package.json
+   tests/
+   ├── test_api.py
+   └── test_websocket.py
+   venv/
    docker-compose.yml
    .env.example
    ```
@@ -777,18 +804,21 @@ Aishwarya & Poojitha hand off to All 4 (Day 8 & 9) → final polish, security, d
 ## Testing
 
 ### Backend
-- **Unit tests**: pytest
-- **API tests**: httpx / pytest
+- **Unit tests**: pytest + pytest-asyncio
+- **API tests**: httpx against live server — **26/28 passed** (2 LLM-dependent skipped)
+- **WebSocket tests**: `tests/test_websocket.py` — connect, subscribe, heartbeat
 - **Static typing**: mypy (optional)
 - **Linting**: ruff (or flake8)
 
 ```bash
-cd apps/api
-pytest -q
+# Using venv
+& "project/venv/Scripts/python.exe" -m pytest tests/test_api.py -v
 ```
 
 ### Frontend
-- **Unit tests**: vitest / jest
+- **TypeScript**: Zero errors (`npx tsc --noEmit`)
+- **Build**: Production build passes — 311KB JS, 17KB CSS
+- **Unit tests**: vitest / jest (to be added Day 7+)
 - **Lint**: eslint
 
 ```bash

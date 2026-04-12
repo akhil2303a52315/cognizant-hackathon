@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     # External
     newsapi_key: str = ""
+    firecrawl_api_key: str = ""
 
     # App
     cors_origins: str = "http://localhost:3000,http://localhost:8000"

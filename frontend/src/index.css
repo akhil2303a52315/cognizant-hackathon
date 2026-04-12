@@ -2,11 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --brand-primary: #3b82f6;
-  --brand-accent: #8b5cf6;
+@layer base {
+  :root {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 263 70% 66%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+    --brand-primary: #3b82f6;
+    --brand-accent: #8b5cf6;
+  }
 }
 
 body {
-  @apply bg-gray-950 text-gray-100;
+  @apply bg-gray-950 text-gray-100 font-sans antialiased;
 }

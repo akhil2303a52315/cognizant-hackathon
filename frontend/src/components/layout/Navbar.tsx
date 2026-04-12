@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Shield, MessageSquare, Flame, Eye } from 'lucide-react'
+import { Shield, MessageSquare, Flame, Eye, Settings, Wifi, WifiOff } from 'lucide-react'
+import { healthApi } from '@/lib/api'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Shield },
@@ -10,6 +12,21 @@ const navItems = [
 
 export default function Navbar() {
   const location = useLocation()
+  const [serverOnline, setServerOnline] = useState(false)
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        await healthApi.check()
+        setServerOnline(true)
+      } catch {
+        setServerOnline(false)
+      }
+    }
+    checkHealth()
+    const interval = setInterval(checkHealth, 15000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-800">
@@ -38,6 +55,25 @@ export default function Navbar() {
               </Link>
             )
           })}
+          <div className="ml-4 flex items-center gap-3">
+            <div className="flex items-center gap-1.5" title={serverOnline ? 'Server online' : 'Server offline'}>
+              {serverOnline ? (
+                <Wifi className="w-4 h-4 text-success-green" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-risk-red" />
+              )}
+              <span className={`text-xs ${serverOnline ? 'text-success-green' : 'text-risk-red'}`}>
+                {serverOnline ? 'Online' : 'Offline'}
+              </span>
+            </div>
+            <Link
+              to="/settings"
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       </div>
     </nav>

@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
@@ -11,9 +11,16 @@ os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "false")
 from backend.config import settings
 from backend.middleware.auth import AuthMiddleware
 from backend.middleware.error_handler import ErrorHandlerMiddleware
+from backend.middleware.rate_limit import RateLimitMiddleware
 from backend.routes.health import router as health_router
 from backend.routes.models import router as models_router
 from backend.routes.council import router as council_router
+from backend.routes.risk import router as risk_router
+from backend.routes.ingest import router as ingest_router
+from backend.routes.optimize import router as optimize_router
+from backend.routes.settings import router as settings_router
+from backend.rag.api import router as rag_router
+from backend.ws.server import websocket_endpoint
 from fastapi.responses import FileResponse
 
 logging.basicConfig(level=getattr(logging, settings.log_level))
@@ -45,6 +52,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Neo4j not available: {e}")
 
+    try:
+        from backend.mcp.registry import register_all_tools
+        register_all_tools()
+        logger.info("✅ MCP tools registered")
+    except Exception as e:
+        logger.warning(f"⚠️ MCP tools registration failed: {e}")
+
     yield
     logger.info("🛑 Shutting down...")
 
@@ -56,9 +70,10 @@ app = FastAPI(
 )
 
 # Middleware order matters: added LAST runs FIRST
-# So: CORS (last) -> Auth -> ErrorHandler (first to execute)
+# So: CORS (last) -> RateLimit -> Auth -> ErrorHandler (first to execute)
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(AuthMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -67,9 +82,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount MCP sub-app
+from backend.mcp.server import mcp_app
+app.mount("/mcp", mcp_app)
+
+# API Routes
 app.include_router(health_router, tags=["Health"])
 app.include_router(models_router, prefix="/models", tags=["Models"])
 app.include_router(council_router, prefix="/council", tags=["Council"])
+app.include_router(risk_router, prefix="/risk", tags=["Risk"])
+app.include_router(ingest_router, prefix="/ingest", tags=["Ingest"])
+app.include_router(optimize_router, prefix="/optimize", tags=["Optimize"])
+app.include_router(settings_router, prefix="/settings", tags=["Settings"])
+app.include_router(rag_router, prefix="/rag", tags=["RAG"])
+
+# WebSocket
+app.websocket("/ws")(websocket_endpoint)
 
 
 @app.get("/test")

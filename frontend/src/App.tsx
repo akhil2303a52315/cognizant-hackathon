@@ -1,24 +1,39 @@
 import { Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import Navbar from './components/layout/Navbar'
+import ToastContainer from './components/shared/Toast'
 import Dashboard from './pages/Dashboard'
 import Chat from './pages/Chat'
 import Debate from './pages/Debate'
 import Brand from './pages/Brand'
+import Settings from './pages/Settings'
+import NotFound from './pages/NotFound'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 30000 },
+  },
+})
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-950">
-      <Navbar />
-      <main className="pt-16">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/debate" element={<Debate />} />
-          <Route path="/brand" element={<Brand />} />
-        </Routes>
-      </main>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <div className="min-h-screen bg-gray-950">
+        <Navbar />
+        <main className="pt-16">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/debate" element={<Debate />} />
+            <Route path="/brand" element={<Brand />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+        <ToastContainer />
+      </div>
+    </QueryClientProvider>
   )
 }
 
