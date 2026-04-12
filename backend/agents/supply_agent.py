@@ -39,7 +39,7 @@ async def supply_agent(state: CouncilState) -> dict:
     try:
         response, model_used = await llm_router.invoke_with_fallback("supply", messages)
         return {
-            "agent_outputs": state.get("agent_outputs", []) + [
+            "agent_outputs": [
                 AgentOutput(
                     agent="supply",
                     confidence=0.0,
@@ -53,7 +53,7 @@ async def supply_agent(state: CouncilState) -> dict:
     except Exception as e:
         logger.error(f"Supply agent failed: {e}")
         return {
-            "agent_outputs": state.get("agent_outputs", []) + [
+            "agent_outputs": [
                 AgentOutput(
                     agent="supply",
                     confidence=0.0,

@@ -36,7 +36,7 @@ async def init_db():
                 await conn.execute(
                     "INSERT INTO _migrations (filename) VALUES ($1)", sql_file.name
                 )
-                print(f"  ✅ Migration: {sql_file.name}")
+                print(f"  [OK] Migration: {sql_file.name}")
 
 
 async def execute_query(query: str, *args):

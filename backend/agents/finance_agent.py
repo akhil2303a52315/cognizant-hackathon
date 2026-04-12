@@ -39,7 +39,7 @@ async def finance_agent(state: CouncilState) -> dict:
     try:
         response, model_used = await llm_router.invoke_with_fallback("finance", messages)
         return {
-            "agent_outputs": state.get("agent_outputs", []) + [
+            "agent_outputs": [
                 AgentOutput(
                     agent="finance",
                     confidence=0.0,
@@ -53,7 +53,7 @@ async def finance_agent(state: CouncilState) -> dict:
     except Exception as e:
         logger.error(f"Finance agent failed: {e}")
         return {
-            "agent_outputs": state.get("agent_outputs", []) + [
+            "agent_outputs": [
                 AgentOutput(
                     agent="finance",
                     confidence=0.0,

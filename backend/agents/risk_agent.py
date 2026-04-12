@@ -40,7 +40,7 @@ async def risk_agent(state: CouncilState) -> dict:
     try:
         response, model_used = await llm_router.invoke_with_fallback("risk", messages)
         return {
-            "agent_outputs": state.get("agent_outputs", []) + [
+            "agent_outputs": [
                 AgentOutput(
                     agent="risk",
                     confidence=0.0,
@@ -54,7 +54,7 @@ async def risk_agent(state: CouncilState) -> dict:
     except Exception as e:
         logger.error(f"Risk agent failed: {e}")
         return {
-            "agent_outputs": state.get("agent_outputs", []) + [
+            "agent_outputs": [
                 AgentOutput(
                     agent="risk",
                     confidence=0.0,
