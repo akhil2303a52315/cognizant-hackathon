@@ -1,14 +1,34 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from backend.graph import build_council_graph
+from backend.llm.router import llm_router
+from backend.agents.risk_agent import SYSTEM_PROMPT as RISK_PROMPT
+from backend.agents.supply_agent import SYSTEM_PROMPT as SUPPLY_PROMPT
+from backend.agents.logistics_agent import SYSTEM_PROMPT as LOGISTICS_PROMPT
+from backend.agents.market_agent import SYSTEM_PROMPT as MARKET_PROMPT
+from backend.agents.finance_agent import SYSTEM_PROMPT as FINANCE_PROMPT
+from backend.agents.brand_agent import SYSTEM_PROMPT as BRAND_PROMPT
+from backend.agents.moderator import SYSTEM_PROMPT as MODERATOR_PROMPT
 import uuid
 import time
+import json
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+AGENT_PROMPTS = {
+    "risk": RISK_PROMPT,
+    "supply": SUPPLY_PROMPT,
+    "logistics": LOGISTICS_PROMPT,
+    "market": MARKET_PROMPT,
+    "finance": FINANCE_PROMPT,
+    "brand": BRAND_PROMPT,
+}
 
 
 class CouncilRequest(BaseModel):
@@ -69,3 +89,75 @@ async def council_analyze(request: CouncilRequest):
     except Exception as e:
         logger.error(f"Council analysis failed: {e}")
         raise HTTPException(500, f"Council analysis failed: {e}")
+
+
+@router.post("/stream")
+async def council_stream(request: CouncilRequest):
+    """SSE streaming endpoint — streams each agent's output token by token."""
+    session_id = str(uuid.uuid4())
+
+    async def event_generator():
+        # Send session start
+        yield f"data: {json.dumps({'type': 'start', 'session_id': session_id})}\n\n"
+
+        # Stream each agent in sequence
+        agent_outputs = {}
+        for agent_name, system_prompt in AGENT_PROMPTS.items():
+            yield f"data: {json.dumps({'type': 'agent_start', 'agent': agent_name})}\n\n"
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Analyze for: {request.query}"},
+            ]
+
+            full_response = ""
+            try:
+                async for token in llm_router.stream_with_fallback(agent_name, messages):
+                    full_response += token
+                    yield f"data: {json.dumps({'type': 'token', 'agent': agent_name, 'content': token})}\n\n"
+            except Exception as e:
+                full_response = f"Agent {agent_name} unavailable: {e}"
+                yield f"data: {json.dumps({'type': 'agent_error', 'agent': agent_name, 'error': str(e)})}\n\n"
+
+            agent_outputs[agent_name] = full_response
+            yield f"data: {json.dumps({'type': 'agent_done', 'agent': agent_name})}\n\n"
+
+        # Moderator synthesis
+        yield f"data: {json.dumps({'type': 'agent_start', 'agent': 'moderator'})}\n\n"
+
+        synth_prompt = (
+            f"{MODERATOR_PROMPT}\n\n"
+            f"Query: {request.query}\n\n"
+            f"Agent outputs:\n"
+        )
+        for name, output in agent_outputs.items():
+            synth_prompt += f"\n--- {name.upper()} ---\n{output}\n"
+
+        synth_messages = [
+            {"role": "system", "content": MODERATOR_PROMPT},
+            {"role": "user", "content": synth_prompt},
+        ]
+
+        synthesis = ""
+        try:
+            async for token in llm_router.stream_with_fallback("moderator", synth_messages):
+                synthesis += token
+                yield f"data: {json.dumps({'type': 'token', 'agent': 'moderator', 'content': token})}\n\n"
+        except Exception as e:
+            synthesis = f"Synthesis failed: {e}"
+            yield f"data: {json.dumps({'type': 'agent_error', 'agent': 'moderator', 'error': str(e)})}\n\n"
+
+        yield f"data: {json.dumps({'type': 'agent_done', 'agent': 'moderator'})}\n\n"
+
+        # Send final result
+        yield f"data: {json.dumps({'type': 'complete', 'session_id': session_id, 'recommendation': synthesis})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

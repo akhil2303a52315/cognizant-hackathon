@@ -11,7 +11,10 @@
         .header h1 { font-size: 24px; background: linear-gradient(90deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .header p { color: #888; font-size: 13px; margin-top: 4px; }
         .container { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
-        .input-section { display: flex; gap: 10px; margin-bottom: 30px; }
+        .input-section { display: flex; gap: 10px; margin-bottom: 30px; align-items: center; }
+        .mode-toggle { display: flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid #2a2a4a; }
+        .mode-toggle button { padding: 10px 16px; border: none; background: #1a1a2e; color: #888; font-size: 13px; cursor: pointer; }
+        .mode-toggle button.active { background: #3b82f6; color: #fff; }
         .input-section input { flex: 1; padding: 14px 18px; border-radius: 10px; border: 1px solid #2a2a4a; background: #1a1a2e; color: #fff; font-size: 15px; outline: none; }
         .input-section input:focus { border-color: #3b82f6; }
         .input-section button { padding: 14px 28px; border-radius: 10px; border: none; background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; }
@@ -48,6 +51,10 @@
     <div class="container">
         <div class="input-section">
             <input type="text" id="query" placeholder="Enter a supply chain query... e.g. 'Taiwan semiconductor factory fire impact'" />
+            <div class="mode-toggle">
+                <button id="mode-batch" class="active" onclick="setMode('batch')">Batch</button>
+                <button id="mode-stream" onclick="setMode('stream')">Stream</button>
+            </div>
             <button id="btn" onclick="analyze()">Analyze</button>
         </div>
         <div id="status" class="status"></div>
@@ -63,23 +70,35 @@
 
     <script>
         const API_KEY = 'dev-key';
+        let currentMode = 'batch';
 
         const AGENT_ICONS = {
             risk: '\u{1F6E1}\uFE0F', supply: '\u{1F3ED}', logistics: '\u{1F6A2}',
-            market: '\u{1F4C8}', finance: '\u{1F4B0}', brand: '\u{1F3F7}\uFE0F'
+            market: '\u{1F4C8}', finance: '\u{1F4B0}', brand: '\u{1F3F7}\uFE0F',
+            moderator: '\u{1F3AF}'
         };
 
         let controller = null;
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('mode-batch').className = mode === 'batch' ? 'active' : '';
+            document.getElementById('mode-stream').className = mode === 'stream' ? 'active' : '';
+        }
 
         async function analyze() {
             const query = document.getElementById('query').value.trim();
             if (!query) return;
 
+            if (currentMode === 'stream') return analyzeStream(query);
+            return analyzeBatch(query);
+        }
+
+        async function analyzeBatch(query) {
             const btn = document.getElementById('btn');
             const status = document.getElementById('status');
             const results = document.getElementById('results');
 
-            // Cancel previous request if any
             if (controller) controller.abort();
             controller = new AbortController();
 
@@ -111,6 +130,103 @@
                 if (e.name === 'AbortError') return;
                 status.className = 'status error';
                 status.textContent = 'Error: ' + e.message + '. Make sure the server is running at http://localhost:8000';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Analyze';
+                controller = null;
+            }
+        }
+
+        async function analyzeStream(query) {
+            const btn = document.getElementById('btn');
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+            const agentsDiv = document.getElementById('agents');
+            const synthDiv = document.getElementById('synthesis-content');
+            const metaDiv = document.getElementById('meta');
+
+            if (controller) controller.abort();
+            controller = new AbortController();
+
+            btn.disabled = true;
+            btn.textContent = 'Streaming...';
+            status.className = 'status loading';
+            status.textContent = 'Streaming council debate...';
+            results.classList.remove('hidden');
+            agentsDiv.innerHTML = '';
+            synthDiv.textContent = '';
+
+            const agentCards = {};
+            const agentTexts = {};
+            let sessionId = '';
+
+            try {
+                const res = await fetch(`/council/stream?api_key=${API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query }),
+                    signal: controller.signal
+                });
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const event = JSON.parse(line.slice(6));
+
+                            if (event.type === 'start') {
+                                sessionId = event.session_id;
+                            }
+                            else if (event.type === 'agent_start') {
+                                const agent = event.agent;
+                                const card = document.createElement('div');
+                                card.className = `agent-card ${agent}`;
+                                card.innerHTML = `<h3><span>${AGENT_ICONS[agent] || '\u{1F916}'}</span> ${agent.charAt(0).toUpperCase() + agent.slice(1)} Agent</h3><div class="provider">Streaming...</div><div class="contribution" id="stream-${agent}"></div>`;
+                                agentsDiv.appendChild(card);
+                                agentTexts[agent] = '';
+                            }
+                            else if (event.type === 'token') {
+                                const agent = event.agent;
+                                agentTexts[agent] = (agentTexts[agent] || '') + event.content;
+                                const el = document.getElementById(`stream-${agent}`);
+                                if (el) el.textContent = agentTexts[agent];
+                            }
+                            else if (event.type === 'agent_done') {
+                                const el = document.getElementById(`stream-${event.agent}`);
+                                if (el && el.parentElement) {
+                                    const providerDiv = el.previousElementSibling;
+                                    if (providerDiv) providerDiv.textContent = 'Complete';
+                                }
+                                status.textContent = `${event.agent} done...`;
+                            }
+                            else if (event.type === 'agent_error') {
+                                const el = document.getElementById(`stream-${event.agent}`);
+                                if (el) el.textContent = `Error: ${event.error}`;
+                            }
+                            else if (event.type === 'complete') {
+                                synthDiv.textContent = event.recommendation || 'No synthesis';
+                                metaDiv.innerHTML = `<span>Session: ${sessionId?.slice(0,8)}...</span><span>Mode: Streaming</span><span>Status: complete</span>`;
+                                status.className = 'status success';
+                                status.textContent = 'Council streaming complete!';
+                            }
+                        } catch {}
+                    }
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+                status.className = 'status error';
+                status.textContent = 'Stream error: ' + e.message;
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Analyze';

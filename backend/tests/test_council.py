@@ -1,14 +1,20 @@
-import pytest
-from backend.graph import build_council_graph
+import httpx
+import json
 
+r = httpx.post(
+    "http://localhost:8000/council/analyze",
+    json={"query": "Taiwan semiconductor factory fire - what is the supply chain impact?"},
+    headers={"X-API-Key": "dev-key"},
+    timeout=120,
+)
 
-class TestGraph:
-    def test_compiles(self):
-        graph = build_council_graph()
-        assert graph is not None
+print(f"Status: {r.status_code}")
+data = r.json()
 
-    def test_has_all_nodes(self):
-        graph = build_council_graph()
-        compiled = graph.compile()
-        for node in ["moderator", "risk", "supply", "logistics", "market", "finance", "brand", "synthesize"]:
-            assert node in compiled.nodes
+for a in data.get("agent_outputs", []):
+    print(f"\n--- {a['agent'].upper()} Agent ({a['model_used']}) ---")
+    print(a["contribution"][:300])
+
+print(f"\n--- SYNTHESIS ---")
+print(data.get("recommendation", "None")[:500])
+print(f"\nLatency: {data.get('latency_ms')}ms | Confidence: {data.get('confidence')}%")
