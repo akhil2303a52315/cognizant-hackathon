@@ -55,16 +55,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Middleware order matters: added LAST runs FIRST
+# So: CORS (last) -> Auth -> ErrorHandler (first to execute)
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins.split(",") + ["null", "http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.add_middleware(AuthMiddleware)
-app.add_middleware(ErrorHandlerMiddleware)
 
 app.include_router(health_router, tags=["Health"])
 app.include_router(models_router, prefix="/models", tags=["Models"])

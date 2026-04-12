@@ -21,13 +21,13 @@ PROVIDER_FACTORIES = {
 }
 
 ROUTING = {
-    "risk":      {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free", "google:gemini-2.0-flash"]},
-    "supply":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:qwen/qwen-2.5-72b-instruct:free", "sambanova:Meta-Llama-3.3-70B-Instruct"]},
-    "logistics": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free", "google:gemini-2.0-flash"]},
-    "market":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:deepseek/deepseek-r1:free", "groq:llama-3.3-70b-versatile", "google:gemini-2.0-flash"]},
-    "finance":   {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:deepseek/deepseek-r1:free", "groq:llama-3.3-70b-versatile", "cohere:command-r-plus"]},
-    "brand":     {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "google:gemini-2.0-flash", "openrouter:google/gemma-2-9b-it:free"]},
-    "moderator": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["google:gemini-2.0-flash", "openrouter:deepseek/deepseek-r1:free", "groq:llama-3.3-70b-versatile"]},
+    "risk":      {"primary": "nvidia:meta/llama-3.1-70b-instruct", "fallback": ["nvidia:meta/llama-3.1-8b-instruct", "nvidia:mistralai/mixtral-8x7b-instruct-v0.1", "nvidia:microsoft/phi-3-medium-128k-instruct"]},
+    "supply":    {"primary": "nvidia:mistralai/mixtral-8x7b-instruct-v0.1", "fallback": ["nvidia:meta/llama-3.1-70b-instruct", "nvidia:mistralai/mistral-7b-instruct-v0.3", "nvidia:meta/llama-3.1-8b-instruct"]},
+    "logistics": {"primary": "nvidia:microsoft/phi-3-medium-128k-instruct", "fallback": ["nvidia:meta/llama-3.1-70b-instruct", "nvidia:mistralai/mixtral-8x7b-instruct-v0.1", "nvidia:meta/llama-3.1-8b-instruct"]},
+    "market":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["nvidia:mistralai/mistral-7b-instruct-v0.3", "nvidia:microsoft/phi-3-medium-128k-instruct", "nvidia:mistralai/mixtral-8x7b-instruct-v0.1"]},
+    "finance":   {"primary": "nvidia:mistralai/mistral-7b-instruct-v0.3", "fallback": ["nvidia:meta/llama-3.1-70b-instruct", "nvidia:microsoft/phi-3-medium-128k-instruct", "nvidia:mistralai/mixtral-8x7b-instruct-v0.1"]},
+    "brand":     {"primary": "nvidia:microsoft/phi-3-mini-128k-instruct", "fallback": ["nvidia:mistralai/mistral-7b-instruct-v0.3", "nvidia:meta/llama-3.1-8b-instruct", "nvidia:mistralai/mixtral-8x7b-instruct-v0.1"]},
+    "moderator": {"primary": "nvidia:meta/llama-3.1-70b-instruct", "fallback": ["nvidia:mistralai/mixtral-8x7b-instruct-v0.1", "nvidia:microsoft/phi-3-medium-128k-instruct", "nvidia:meta/llama-3.1-8b-instruct"]},
 }
 
 
