@@ -70,8 +70,8 @@
             market: '#f59e0b', finance: '#10b981', brand: '#8b5cf6'
         };
         const AGENT_ICONS = {
-            risk: '🛡️', supply: '🏭', logistics: '🚢',
-            market: '📈', finance: '💰', brand: '🏷️'
+            risk: '\u{1F6E1}\uFE0F', supply: '\u{1F3ED}', logistics: '\u{1F6A2}',
+            market: '\u{1F4C8}', finance: '\u{1F4B0}', brand: '\u{1F3F7}\uFE0F'
         };
 
         async function analyze() {
@@ -89,12 +89,9 @@
             results.classList.add('hidden');
 
             try {
-                const res = await fetch(`${API_BASE}/council/analyze`, {
+                const res = await fetch(`${API_BASE}/council/analyze?api_key=${API_KEY}`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query })
                 });
 
@@ -105,7 +102,7 @@
 
                 const data = await res.json();
                 status.className = 'status success';
-                status.textContent = `Council complete in ${data.latency_ms}ms — Round ${data.round_number}`;
+                status.textContent = `Council complete in ${data.latency_ms}ms \u2014 Round ${data.round_number}`;
                 renderResults(data);
             } catch (e) {
                 status.className = 'status error';

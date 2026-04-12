@@ -14,6 +14,7 @@ from backend.middleware.error_handler import ErrorHandlerMiddleware
 from backend.routes.health import router as health_router
 from backend.routes.models import router as models_router
 from backend.routes.council import router as council_router
+from fastapi.responses import FileResponse
 
 logging.basicConfig(level=getattr(logging, settings.log_level))
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins.split(","),
+    allow_origins=settings.cors_origins.split(",") + ["null", "http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,6 +69,11 @@ app.add_middleware(ErrorHandlerMiddleware)
 app.include_router(health_router, tags=["Health"])
 app.include_router(models_router, prefix="/models", tags=["Models"])
 app.include_router(council_router, prefix="/council", tags=["Council"])
+
+
+@app.get("/test")
+async def test_page():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "..", "test.html"))
 
 
 if __name__ == "__main__":
