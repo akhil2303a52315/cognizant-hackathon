@@ -14,20 +14,20 @@ logger = logging.getLogger(__name__)
 PROVIDER_FACTORIES = {
     "groq": lambda model="llama-3.3-70b-versatile": get_groq_client(model),
     "openrouter": lambda model="meta-llama/llama-3.3-70b-instruct:free": get_openrouter_client(model),
-    "nvidia": lambda model="nvidia/llama-3.1-nemotron-70b-instruct": get_nvidia_client(model),
+    "nvidia": lambda model="meta/llama-3.1-8b-instruct": get_nvidia_client(model),
     "google": lambda model="gemini-2.0-flash": get_google_client(model),
     "cohere": lambda model="command-r-plus": get_cohere_client(model),
     "sambanova": lambda model="Meta-Llama-3.3-70B-Instruct": get_sambanova_client(model),
 }
 
 ROUTING = {
-    "risk":      {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["nvidia:nvidia/llama-3.1-nemotron-70b-instruct", "openrouter:meta-llama/llama-3.3-70b-instruct:free", "google:gemini-2.0-flash"]},
-    "supply":    {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:qwen/qwen-2.5-72b-instruct:free", "nvidia:nvidia/llama-3.1-nemotron-70b-instruct", "sambanova:Meta-Llama-3.3-70B-Instruct"]},
-    "logistics": {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:meta-llama/llama-3.3-70b-instruct:free", "google:gemini-2.0-flash", "nvidia:nvidia/llama-3.1-nemotron-70b-instruct"]},
-    "market":    {"primary": "openrouter:deepseek/deepseek-r1:free", "fallback": ["nvidia:nvidia/llama-3.1-nemotron-70b-instruct", "groq:llama-3.3-70b-versatile", "google:gemini-2.0-flash"]},
-    "finance":   {"primary": "nvidia:nvidia/llama-3.1-nemotron-70b-instruct", "fallback": ["openrouter:deepseek/deepseek-r1:free", "groq:llama-3.3-70b-versatile", "cohere:command-r-plus"]},
-    "brand":     {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["google:gemini-2.0-flash", "openrouter:google/gemma-2-9b-it:free", "nvidia:nvidia/llama-3.1-nemotron-70b-instruct"]},
-    "moderator": {"primary": "google:gemini-2.0-flash", "fallback": ["openrouter:deepseek/deepseek-r1:free", "nvidia:nvidia/llama-3.1-nemotron-70b-instruct", "groq:llama-3.3-70b-versatile"]},
+    "risk":      {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free", "google:gemini-2.0-flash"]},
+    "supply":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:qwen/qwen-2.5-72b-instruct:free", "sambanova:Meta-Llama-3.3-70B-Instruct"]},
+    "logistics": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free", "google:gemini-2.0-flash"]},
+    "market":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:deepseek/deepseek-r1:free", "groq:llama-3.3-70b-versatile", "google:gemini-2.0-flash"]},
+    "finance":   {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:deepseek/deepseek-r1:free", "groq:llama-3.3-70b-versatile", "cohere:command-r-plus"]},
+    "brand":     {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "google:gemini-2.0-flash", "openrouter:google/gemma-2-9b-it:free"]},
+    "moderator": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["google:gemini-2.0-flash", "openrouter:deepseek/deepseek-r1:free", "groq:llama-3.3-70b-versatile"]},
 }
 
 
