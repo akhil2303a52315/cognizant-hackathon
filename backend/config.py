@@ -34,6 +34,27 @@ class Settings(BaseSettings):
     langchain_tracing_v2: bool = True
     langchain_api_key: str = ""
     langchain_project: str = "supplychaingpt-council"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+    langsmith_cost_tracking: bool = True
+    langsmith_trace_sample_rate: float = 1.0  # 0.0-1.0 for sampling
+
+    # Prometheus Metrics
+    prometheus_enabled: bool = True
+    prometheus_port: int = 9090
+
+    # WebSocket
+    ws_heartbeat_interval: int = 30
+    ws_max_connections: int = 100
+    ws_debate_buffer_size: int = 1000
+
+    # Security
+    security_headers_enabled: bool = True
+    prompt_injection_guard: bool = True
+    pii_redaction_enabled: bool = True
+    max_query_length: int = 2000
+
+    # Session Storage
+    session_store_ttl: int = 86400  # 24h Redis TTL for council sessions
 
     # External Data APIs
     newsapi_key: str = ""

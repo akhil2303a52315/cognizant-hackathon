@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional
-from backend.graph import build_council_graph
+from backend.graph import build_council_graph, run_council_streaming
 from backend.llm.router import llm_router
 from backend.agents.risk_agent import SYSTEM_PROMPT as RISK_PROMPT
 from backend.agents.supply_agent import SYSTEM_PROMPT as SUPPLY_PROMPT
@@ -12,6 +12,11 @@ from backend.agents.finance_agent import SYSTEM_PROMPT as FINANCE_PROMPT
 from backend.agents.brand_agent import SYSTEM_PROMPT as BRAND_PROMPT
 from backend.agents.moderator import SYSTEM_PROMPT as MODERATOR_PROMPT
 from backend.ws.events import EventType, Topic, emit_event
+from backend.observability.langsmith_config import (
+    CouncilTracer, record_agent_call, record_debate_round, record_mcp_call,
+)
+from backend.middleware.security import sanitize_input, redact_pii
+from backend.config import settings
 import uuid
 import time
 import json
@@ -38,6 +43,17 @@ class CouncilRequest(BaseModel):
     ws_session_id: Optional[str] = None
 
 
+class CouncilQueryRequest(BaseModel):
+    query: str
+    context: Optional[dict] = None
+    stream: Optional[bool] = False
+
+
+class FallbackExecuteRequest(BaseModel):
+    session_id: str
+    fallback_index: int = 0  # index into tiered_fallbacks list
+
+
 class CouncilResponse(BaseModel):
     session_id: str
     recommendation: Optional[str] = None
@@ -49,6 +65,263 @@ class CouncilResponse(BaseModel):
     latency_ms: int = 0
 
 
+# ---------------------------------------------------------------------------
+# Day 6: POST /council/query — full graph with debate + optional streaming
+# ---------------------------------------------------------------------------
+@router.post("/query")
+async def council_query(request: CouncilQueryRequest):
+    """Run the full council graph with debate engine, predictions, and fallbacks.
+
+    If stream=True, returns SSE with intermediate results.
+    Otherwise returns the complete result as JSON.
+    """
+    query = sanitize_input(request.query)
+
+    if request.stream:
+        return await _council_query_stream(query, request.context)
+
+    session_id = str(uuid.uuid4())
+    start = time.time()
+    tracer = CouncilTracer(session_id)
+
+    try:
+        graph = build_council_graph()
+        compile_kwargs = {}
+        if settings.human_in_loop:
+            compile_kwargs["interrupt_before"] = ["synthesize"]
+        compiled = graph.compile(**compile_kwargs)
+
+        initial_state = {
+            "query": query,
+            "messages": [],
+            "risk_score": None,
+            "recommendation": None,
+            "confidence": None,
+            "debate_history": [],
+            "fallback_options": [],
+            "agent_outputs": [],
+            "evidence": [],
+            "round_number": 0,
+            "llm_calls_log": [],
+            "session_id": session_id,
+            "context": request.context or {},
+            "debate_rounds": [],
+            "predictions": [],
+            "tiered_fallbacks": [],
+            "brand_sentiment": None,
+            "human_approved": None,
+        }
+
+        result = await compiled.ainvoke(initial_state)
+        latency_ms = int((time.time() - start) * 1000)
+
+        # Record metrics
+        record_debate_round(
+            session_id=session_id,
+            round_number=result.get("round_number", 0),
+            phase="complete",
+            confidence=result.get("confidence", 0) * 100,
+            risk_score=result.get("risk_score", 0),
+            latency_ms=latency_ms,
+        )
+
+        # Store session to Redis
+        try:
+            from backend.db.redis_client import cache_set
+            from backend.config import settings as _s
+            session_data = {
+                "session_id": session_id,
+                "query": query,
+                "recommendation": result.get("recommendation", ""),
+                "confidence": result.get("confidence", 0),
+                "risk_score": result.get("risk_score", 0),
+                "debate_rounds": result.get("debate_rounds", []),
+                "agent_outputs": [
+                    {"agent": o.agent, "confidence": o.confidence, "contribution": o.contribution[:300]}
+                    for o in result.get("agent_outputs", [])
+                ],
+                "tiered_fallbacks": result.get("tiered_fallbacks", []),
+                "predictions": result.get("predictions", []),
+                "timestamp": time.time(),
+            }
+            await cache_set(f"council_session:{session_id}", session_data, ttl=_s.session_store_ttl)
+        except Exception as e:
+            logger.warning(f"Session storage failed: {e}")
+
+        trace_url = tracer.get_trace_url()
+
+        return {
+            "success": True,
+            "data": {
+                "session_id": session_id,
+                "recommendation": result.get("recommendation"),
+                "confidence": result.get("confidence"),
+                "risk_score": result.get("risk_score"),
+                "agent_outputs": [o.model_dump() for o in result.get("agent_outputs", [])],
+                "evidence": [e.model_dump() for e in result.get("evidence", [])],
+                "debate_rounds": result.get("debate_rounds", []),
+                "predictions": result.get("predictions", []),
+                "tiered_fallbacks": result.get("tiered_fallbacks", []),
+                "brand_sentiment": result.get("brand_sentiment"),
+                "round_number": result.get("round_number", 0),
+                "latency_ms": latency_ms,
+                "trace_url": trace_url,
+            },
+            "error": None,
+        }
+    except Exception as e:
+        logger.error(f"Council query failed: {e}", extra={"session_id": session_id})
+        return {
+            "success": False,
+            "data": None,
+            "error": f"Council analysis failed: {e}",
+        }
+
+
+async def _council_query_stream(query: str, context: dict | None = None):
+    """SSE streaming variant of /council/query."""
+    session_id = str(uuid.uuid4())
+
+    async def event_generator():
+        yield f"data: {json.dumps({'type': 'start', 'session_id': session_id})}\n\n"
+
+        async for payload in run_council_streaming(
+            query=query,
+            context=context,
+            session_id=session_id,
+        ):
+            yield f"data: {json.dumps(payload)}\n\n"
+
+        yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Day 6: GET /council/history — past sessions from Redis
+# ---------------------------------------------------------------------------
+@router.get("/history")
+async def council_history(limit: int = 20, offset: int = 0):
+    """Return past council sessions stored in Redis."""
+    try:
+        from backend.db.redis_client import get_redis
+        r = await get_redis()
+        keys = await r.keys("council_session:*")
+        # Sort by timestamp (most recent first)
+        sessions = []
+        for key in keys[offset: offset + limit]:
+            data = await r.get(key)
+            if data:
+                import json as _json
+                sessions.append(_json.loads(data))
+        sessions.sort(key=lambda s: s.get("timestamp", 0), reverse=True)
+
+        return {
+            "success": True,
+            "data": {
+                "sessions": sessions,
+                "total": len(keys),
+                "limit": limit,
+                "offset": offset,
+            },
+            "error": None,
+        }
+    except Exception as e:
+        logger.warning(f"Council history unavailable (Redis may be down): {e}")
+        return {
+            "success": False,
+            "data": {"sessions": [], "total": 0},
+            "error": f"Session history unavailable: {e}",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Day 6: POST /council/execute-fallback — one-click fallback via MCP
+# ---------------------------------------------------------------------------
+@router.post("/execute-fallback")
+async def execute_fallback(request: FallbackExecuteRequest):
+    """Execute a fallback option via its linked MCP tool.
+
+    Loads the session from Redis, picks the fallback at the given index,
+    and invokes the MCP tool specified in the fallback.
+    """
+    try:
+        from backend.db.redis_client import cache_get
+        session = await cache_get(f"council_session:{request.session_id}")
+    except Exception as e:
+        return {"success": False, "data": None, "error": f"Could not load session: {e}"}
+
+    if not session:
+        return {"success": False, "data": None, "error": f"Session {request.session_id} not found"}
+
+    fallbacks = session.get("tiered_fallbacks", [])
+    if request.fallback_index >= len(fallbacks):
+        return {
+            "success": False,
+            "data": None,
+            "error": f"Fallback index {request.fallback_index} out of range (0-{len(fallbacks)-1})",
+        }
+
+    fallback = fallbacks[request.fallback_index]
+    mcp_tool = fallback.get("mcp_tool")
+    mcp_params = fallback.get("mcp_params", {})
+
+    if not mcp_tool:
+        return {
+            "success": False,
+            "data": None,
+            "error": f"Fallback '{fallback.get('name')}' has no linked MCP tool for auto-execution. Manual execution required.",
+        }
+
+    # Invoke the MCP tool
+    start = time.time()
+    try:
+        from backend.mcp.mcp_toolkit import get_scoped_client
+        client = get_scoped_client("moderator")
+        result = await client.call_tool(mcp_tool, mcp_params)
+        latency_ms = int((time.time() - start) * 1000)
+
+        record_mcp_call(
+            tool_name=mcp_tool, agent="moderator",
+            latency_ms=latency_ms, success=True,
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "session_id": request.session_id,
+                "fallback_name": fallback.get("name"),
+                "fallback_tier": fallback.get("tier"),
+                "mcp_tool": mcp_tool,
+                "mcp_result": result,
+                "latency_ms": latency_ms,
+            },
+            "error": None,
+        }
+    except Exception as e:
+        latency_ms = int((time.time() - start) * 1000)
+        record_mcp_call(
+            tool_name=mcp_tool or "unknown", agent="moderator",
+            latency_ms=latency_ms, success=False,
+        )
+        return {
+            "success": False,
+            "data": None,
+            "error": f"MCP tool '{mcp_tool}' execution failed: {e}",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Original endpoints (kept for backward compatibility)
+# ---------------------------------------------------------------------------
 @router.post("/analyze", response_model=CouncilResponse)
 async def council_analyze(request: CouncilRequest):
     session_id = str(uuid.uuid4())
@@ -196,25 +469,35 @@ async def export_council_pdf(session_id: str):
         "risk_scores": [],
     }
 
-    # Try to load from DB if available
+    # Try to load from Redis first, then DB
     try:
-        from backend.db.neon import execute_query
-        rows = await execute_query(
-            "SELECT * FROM council_sessions WHERE session_id = $1", session_id
-        )
-        if rows:
-            row = dict(rows[0])
-            session_data["query"] = row.get("query", session_data["query"])
-            session_data["recommendation"] = row.get("recommendation", session_data["recommendation"])
-            session_data["timestamp"] = str(row.get("created_at", session_data["timestamp"]))
-            if row.get("agent_outputs"):
-                import json as _json
-                session_data["agent_outputs"] = _json.loads(row["agent_outputs"]) if isinstance(row["agent_outputs"], str) else row["agent_outputs"]
-            if row.get("risk_scores"):
-                import json as _json
-                session_data["risk_scores"] = _json.loads(row["risk_scores"]) if isinstance(row["risk_scores"], str) else row["risk_scores"]
+        from backend.db.redis_client import cache_get
+        cached = await cache_get(f"council_session:{session_id}")
+        if cached:
+            session_data.update(cached)
     except Exception:
         pass
+
+    # Try DB if Redis didn't have it
+    if session_data.get("recommendation") == "Session data not persisted yet — export shows template.":
+        try:
+            from backend.db.neon import execute_query
+            rows = await execute_query(
+                "SELECT * FROM council_sessions WHERE session_id = $1", session_id
+            )
+            if rows:
+                row = dict(rows[0])
+                session_data["query"] = row.get("query", session_data["query"])
+                session_data["recommendation"] = row.get("recommendation", session_data["recommendation"])
+                session_data["timestamp"] = str(row.get("created_at", session_data["timestamp"]))
+                if row.get("agent_outputs"):
+                    import json as _json
+                    session_data["agent_outputs"] = _json.loads(row["agent_outputs"]) if isinstance(row["agent_outputs"], str) else row["agent_outputs"]
+                if row.get("risk_scores"):
+                    import json as _json
+                    session_data["risk_scores"] = _json.loads(row["risk_scores"]) if isinstance(row["risk_scores"], str) else row["risk_scores"]
+        except Exception:
+            pass
 
     try:
         pdf_bytes = await generate_pdf(session_data)

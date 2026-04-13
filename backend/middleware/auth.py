@@ -5,7 +5,7 @@ import os
 
 API_KEYS = os.getenv("API_KEYS", "dev-key").split(",")
 MCP_API_KEYS = os.getenv("MCP_API_KEY", "dev-mcp-key").split(",")
-PUBLIC_ENDPOINTS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc", "/test", "/market/ticker", "/market/risk-dashboard", "/market/brand-intel"}
+PUBLIC_ENDPOINTS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc", "/test", "/metrics", "/market/ticker", "/market/risk-dashboard", "/market/brand-intel"}
 PUBLIC_PREFIXES = ("/market/company/",)
 
 

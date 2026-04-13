@@ -29,7 +29,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return settings.rate_limit_per_minute
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in {"/health", "/ready", "/docs", "/openapi.json", "/redoc", "/test"}:
+        if request.url.path in {"/health", "/ready", "/docs", "/openapi.json", "/redoc", "/test", "/metrics"}:
             return await call_next(request)
 
         if request.method == "OPTIONS":

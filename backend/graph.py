@@ -9,6 +9,10 @@ from backend.agents.finance_agent import finance_agent
 from backend.agents.brand_agent import brand_agent
 from backend.agents.supervisor import should_debate
 import logging
+import json
+import time
+
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -220,3 +224,198 @@ def build_council_graph() -> StateGraph:
     graph.add_edge("synthesize", END)
 
     return graph
+
+
+# ---------------------------------------------------------------------------
+# Day 6: Human-in-the-loop interrupt node
+# ---------------------------------------------------------------------------
+async def human_review_node(state: CouncilState) -> dict:
+    """Interrupt point for human review before final synthesis.
+
+    When settings.human_in_loop is True, the graph pauses here
+    and waits for human_approved to be set in the state before
+    proceeding to synthesis.
+
+    This node is NOT added to the graph by default — it is used
+    by the streaming runner which checks the flag and injects it.
+    """
+    human_approved = state.get("human_approved")
+    if human_approved is None:
+        # Mark that we're waiting for human input
+        logger.info(f"Human review requested for session {state.get('session_id')}")
+        return {"human_approved": False}  # Will be overridden by human input
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Day 6: Streaming runner — yields intermediate debate results via callback
+# ---------------------------------------------------------------------------
+async def run_council_streaming(
+    query: str,
+    context: dict | None = None,
+    session_id: str | None = None,
+    ws_callback=None,
+):
+    """Run the full council graph with streaming support.
+
+    Yields intermediate results as they complete:
+      - Each agent output as it finishes
+      - Each debate round as it completes
+      - Final recommendation
+
+    Args:
+        query: The supply chain query
+        context: Optional context dict
+        session_id: Optional session ID (auto-generated if not provided)
+        ws_callback: Optional async callable(payload: dict) for WebSocket push
+
+    Yields:
+        dict with {type, data} for each intermediate result
+    """
+    import uuid
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    from backend.observability.langsmith_config import CouncilTracer, record_agent_call
+    tracer = CouncilTracer(session_id)
+
+    initial_state = {
+        "query": query,
+        "messages": [],
+        "risk_score": None,
+        "recommendation": None,
+        "confidence": None,
+        "debate_history": [],
+        "fallback_options": [],
+        "agent_outputs": [],
+        "evidence": [],
+        "round_number": 0,
+        "llm_calls_log": [],
+        "session_id": session_id,
+        "context": context or {},
+        "debate_rounds": [],
+        "predictions": [],
+        "tiered_fallbacks": [],
+        "brand_sentiment": None,
+        "human_approved": None,
+    }
+
+    graph = build_council_graph()
+
+    # Use interrupt_before if human-in-loop is enabled
+    compile_kwargs = {}
+    if settings.human_in_loop:
+        compile_kwargs["interrupt_before"] = ["synthesize"]
+
+    compiled = graph.compile(**compile_kwargs)
+
+    # Stream events from the graph
+    current_state = initial_state
+    async for event in compiled.astream_events(initial_state, version="v2"):
+        kind = event.get("event", "")
+
+        # Agent node completion
+        if kind == "on_chain_end" and event.get("data", {}).get("output"):
+            node_name = event.get("name", "")
+            output = event["data"]["output"]
+
+            if node_name in ("risk", "supply", "logistics", "market", "finance", "brand"):
+                payload = {
+                    "type": "agent_done",
+                    "data": {
+                        "agent": node_name,
+                        "session_id": session_id,
+                    },
+                }
+                # Merge output into current state tracking
+                if isinstance(output, dict) and "agent_outputs" in output:
+                    for ao in output.get("agent_outputs", []):
+                        payload["data"]["confidence"] = ao.confidence if hasattr(ao, "confidence") else 0
+                        payload["data"]["contribution"] = ao.contribution[:200] if hasattr(ao, "contribution") else ""
+
+                yield payload
+                if ws_callback:
+                    try:
+                        await ws_callback(payload)
+                    except Exception:
+                        pass
+
+            elif node_name == "debate":
+                payload = {
+                    "type": "debate_round",
+                    "data": {
+                        "session_id": session_id,
+                        "debate_rounds": output.get("debate_rounds", []),
+                        "confidence": output.get("confidence", 0),
+                        "risk_score": output.get("risk_score", 0),
+                    },
+                }
+                yield payload
+                if ws_callback:
+                    try:
+                        await ws_callback(payload)
+                    except Exception:
+                        pass
+
+            elif node_name == "synthesize":
+                payload = {
+                    "type": "complete",
+                    "data": {
+                        "session_id": session_id,
+                        "recommendation": output.get("recommendation", ""),
+                        "confidence": output.get("confidence", 0),
+                        "risk_score": output.get("risk_score", 0),
+                    },
+                }
+                yield payload
+                if ws_callback:
+                    try:
+                        await ws_callback(payload)
+                    except Exception:
+                        pass
+
+    # If human-in-loop, the graph may have paused — run again with approval
+    if settings.human_in_loop:
+        # Get the current state from the paused graph
+        try:
+            state_snapshot = compiled.get_state(initial_state)
+            if state_snapshot and not state_snapshot.values.get("human_approved"):
+                logger.info(f"Graph paused for human review: session={session_id}")
+                payload = {
+                    "type": "human_review_needed",
+                    "data": {
+                        "session_id": session_id,
+                        "debate_rounds": state_snapshot.values.get("debate_rounds", []),
+                        "confidence": state_snapshot.values.get("confidence", 0),
+                        "risk_score": state_snapshot.values.get("risk_score", 0),
+                    },
+                }
+                yield payload
+                if ws_callback:
+                    try:
+                        await ws_callback(payload)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning(f"Human-in-loop state check failed: {e}")
+
+    # Store session to Redis for /council/history
+    try:
+        from backend.db.redis_client import cache_set
+        final_result = await compiled.ainvoke(initial_state)
+        session_data = {
+            "session_id": session_id,
+            "query": query,
+            "recommendation": final_result.get("recommendation", ""),
+            "confidence": final_result.get("confidence", 0),
+            "risk_score": final_result.get("risk_score", 0),
+            "debate_rounds": final_result.get("debate_rounds", []),
+            "agent_outputs": [
+                {"agent": o.agent, "confidence": o.confidence, "contribution": o.contribution[:300]}
+                for o in final_result.get("agent_outputs", [])
+            ],
+            "timestamp": time.time(),
+        }
+        await cache_set(f"council_session:{session_id}", session_data, ttl=settings.session_store_ttl)
+    except Exception as e:
+        logger.warning(f"Session storage to Redis failed: {e}")
