@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     # External Data APIs
     newsapi_key: str = ""
     firecrawl_api_key: str = ""
+    firecrawl_base_url: str = ""  # Self-hosted Firecrawl URL (e.g. http://localhost:3002)
     finnhub_api_key: str = ""
     fred_api_key: str = ""
     bytez_api_key: str = ""

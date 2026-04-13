@@ -61,7 +61,7 @@ AGENT_RAG_PROFILES = {
         "recency_days": 7,
         "confidence_threshold": 0.70,
         "description": "GDELT events, news, geopolitical risk data",
-        "mcp_escalation_tools": ["nvd_cve_search", "shodan_host_info", "owm_weather_alerts", "noaa_storm_events", "currents_latest_news"],
+        "mcp_escalation_tools": ["nvd_cve_search", "shodan_host_info", "owm_weather_alerts", "noaa_storm_events", "currents_latest_news", "web_scrape_news", "web_search"],
     },
     "supply": {
         "collection": "supplier-docs",
@@ -69,7 +69,7 @@ AGENT_RAG_PROFILES = {
         "recency_days": 30,
         "confidence_threshold": 0.65,
         "description": "Supplier contracts, SOPs, capability matrices",
-        "mcp_escalation_tools": ["neo4j_query", "supplier_search", "contract_lookup"],
+        "mcp_escalation_tools": ["neo4j_query", "supplier_search", "contract_lookup", "web_scrape_supplier", "web_search"],
     },
     "logistics": {
         "collection": "logistics-routes",
@@ -77,7 +77,7 @@ AGENT_RAG_PROFILES = {
         "recency_days": 3,
         "confidence_threshold": 0.70,
         "description": "Shipping routes, port congestion, weather alerts",
-        "mcp_escalation_tools": ["owm_current_weather", "noaa_storm_events", "noaa_drought_monitor", "gh_route_optimize", "usgs_earthquakes"],
+        "mcp_escalation_tools": ["owm_current_weather", "noaa_storm_events", "noaa_drought_monitor", "gh_route_optimize", "usgs_earthquakes", "web_scrape"],
     },
     "market": {
         "collection": "market-intelligence",
@@ -85,7 +85,7 @@ AGENT_RAG_PROFILES = {
         "recency_days": 7,
         "confidence_threshold": 0.65,
         "description": "Commodity prices, trade data, market trends",
-        "mcp_escalation_tools": ["av_commodity_price", "td_price_quote", "fmp_dcf_valuation", "marketaux_news", "polygon_market_status"],
+        "mcp_escalation_tools": ["av_commodity_price", "td_price_quote", "fmp_dcf_valuation", "marketaux_news", "polygon_market_status", "web_search"],
     },
     "finance": {
         "collection": "finance-forex",
@@ -93,7 +93,7 @@ AGENT_RAG_PROFILES = {
         "recency_days": 1,
         "confidence_threshold": 0.75,
         "description": "Financial reports, currency exchange, insurance claims",
-        "mcp_escalation_tools": ["av_currency_exchange", "exr_latest_rates", "td_forex_rate", "fmp_income_statement", "frankfurter_latest_rates"],
+        "mcp_escalation_tools": ["av_currency_exchange", "exr_latest_rates", "td_forex_rate", "fmp_income_statement", "frankfurter_latest_rates", "web_scrape"],
     },
     "brand": {
         "collection": "brand-sentiment",
@@ -101,7 +101,7 @@ AGENT_RAG_PROFILES = {
         "recency_days": 3,
         "confidence_threshold": 0.60,
         "description": "Social sentiment, PR news, crisis communications",
-        "mcp_escalation_tools": ["currents_brand_sentiment", "marketaux_sentiment", "gnews_search", "currents_latest_news", "newsapi_top_headlines"],
+        "mcp_escalation_tools": ["currents_brand_sentiment", "marketaux_sentiment", "gnews_search", "currents_latest_news", "newsapi_top_headlines", "web_scrape_news", "web_search"],
     },
     "moderator": {
         "collection": DEFAULT_COLLECTION,
