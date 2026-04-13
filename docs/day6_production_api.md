@@ -19,7 +19,7 @@ Day 6 hardens the SupplyChainGPT Council backend for production with:
 | `backend/middleware/security.py` | Prompt injection guard (17 patterns), PII redaction (SSN/email/phone/CC/IP), input sanitization, security headers |
 | `backend/middleware/logging.py` | Structured JSON logging, request/response logging with correlation IDs |
 | `backend/middleware/rate_limiter.py` | Redis sliding window rate limiter (in-memory fallback), per-endpoint limits, X-RateLimit-* headers |
-| `backend/routes/observability.py` | Traces, metrics, spans, WebSocket debate streaming |
+| `backend/routes/observability.py` | Traces, metrics, spans, WebSocket debate streaming (`/ws/debate` + `/ws/debate/{session_id}`) |
 
 ## Updated Files
 
@@ -52,7 +52,8 @@ Day 6 hardens the SupplyChainGPT Council backend for production with:
 | `GET` | `/observability/traces` | LangSmith trace links for sessions |
 | `GET` | `/observability/metrics` | Latency, token usage, confidence averages (JSON) |
 | `GET` | `/observability/spans` | Detailed span breakdown |
-| `WS` | `/observability/ws/debate` | Real-time debate round streaming |
+| `WS` | `/observability/ws/debate` | Real-time debate round streaming (client sends session_id) |
+| `WS` | `/observability/ws/debate/{session_id}` | Real-time debate streaming with session ID in URL path |
 
 ### System
 
@@ -66,6 +67,7 @@ Day 6 hardens the SupplyChainGPT Council backend for production with:
 ## WebSocket Debate Protocol
 
 Connect: `ws://localhost:8000/observability/ws/debate?api_key=dev-key`
+Or: `ws://localhost:8000/observability/ws/debate/{session_id}?api_key=dev-key`
 
 ### Client → Server
 
@@ -235,8 +237,8 @@ CONFIDENCE_GAP_THRESHOLD=20.0
 
 ## Test Results
 
-- **60/60** existing tests pass (no regressions)
-- All new imports verified
+- **54/54** core engine tests pass (debate, predictions, fallback, state)
+- All new imports verified (asyncio, run_council_streaming, CouncilTracer)
 - Live endpoint tests:
   - `/health` ✅ — all components OK
   - `/metrics` ✅ — Prometheus format
@@ -246,3 +248,58 @@ CONFIDENCE_GAP_THRESHOLD=20.0
   - Prompt injection guard ✅ — blocks with 400
   - Security headers ✅ — all 6 headers present
   - JSON structured logging ✅ — correlation IDs
+
+---
+
+## Brand Agent Enhancement
+
+The `brand_agent` was enhanced with production-grade features from `brand_agent_enhancement.py`:
+
+### New Capabilities
+- **Confidence parsing** — extracts confidence score from LLM response text
+- **Sentiment analysis** — classifies response as positive/neutral/negative/crisis
+- **Crisis communication drafts** — auto-generates press releases when sentiment is negative/crisis
+- **Advertising pivot recommendations** — suggests campaign pauses/shifts when confidence < 50
+- **Real-time MCP data** — fetches news + Reddit data via MCP tools for grounding
+- **BrandSentiment model** — structured output with sentiment_score, trending_topics, crisis_keywords, recommended_actions
+
+### Key Functions Added
+| Function | Purpose |
+|----------|---------|
+| `_parse_confidence()` | Extract confidence from LLM text (regex) |
+| `_parse_sentiment()` | Classify sentiment category |
+| `_extract_key_points()` | Parse numbered/bulleted points |
+| `_fetch_brand_mcp_data()` | Real-time news + social data |
+| `_generate_crisis_comm()` | Auto-draft crisis press release |
+| `_generate_ad_pivot()` | Advertising pivot recommendations |
+
+---
+
+## LangSmith Tracing Integration
+
+LangSmith tracing is now wired into all three core engines:
+
+### Debate Engine (`debate_engine.py`)
+- `CouncilTracer` wraps each debate round (analysis, challenge, validation, synthesis)
+- `record_debate_round()` logs round number, phase, confidence, risk, latency
+- Latency tracked per round with `_time.monotonic()`
+
+### Predictions Engine (`predictions_engine.py`)
+- `CouncilTracer` wraps Prophet, LSTM, Monte Carlo calls
+- `record_agent_call()` logs method, agent, latency per prediction method
+- Tracer session ID: `predictions_{agent_name}`
+
+### Fallback Engine (`fallback_engine.py`)
+- `CouncilTracer` wraps fallback generation and MCP execution
+- `record_mcp_call()` logs tool name, agent, latency, success
+- Fallback generation span includes `num_fallbacks` metadata
+
+---
+
+## WebSocket Route: `/ws/debate/{session_id}`
+
+Added a second WebSocket endpoint that accepts `session_id` in the URL path:
+- `ws://localhost:8000/observability/ws/debate/{session_id}?api_key=dev-key`
+- Same protocol as `/ws/debate` but session ID is path-parameterized
+- Useful for reconnecting to existing sessions
+- Both endpoints coexist for backward compatibility

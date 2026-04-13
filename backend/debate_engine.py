@@ -19,8 +19,13 @@ import json
 import logging
 from typing import Optional
 
+import time as _time
+
 from backend.state import CouncilState, AgentOutput, DebateRound
 from backend.llm.router import llm_router
+from backend.observability.langsmith_config import (
+    CouncilTracer, record_debate_round, record_agent_call,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +95,7 @@ class DebateEngine:
         agent_outputs = state.get("agent_outputs", [])
         query = state.get("query", "")
         context = state.get("context") or {}
+        session_id = state.get("session_id", "unknown")
 
         if not agent_outputs:
             return {
@@ -101,20 +107,29 @@ class DebateEngine:
                 "fallback_options": [],
             }
 
+        tracer = CouncilTracer(session_id)
         all_rounds = []
         current_outputs = list(agent_outputs)
 
         # Round 1: Parallel Analysis (already done by agents — summarize)
-        round1 = await self._round_analysis(current_outputs, query, context)
+        t0 = _time.monotonic()
+        with tracer.trace_debate_round(1, phase="analysis"):
+            round1 = await self._round_analysis(current_outputs, query, context)
+        latency1 = (_time.monotonic() - t0) * 1000
+        record_debate_round(session_id, 1, "analysis", round1["round_confidence"], 0, latency1)
         all_rounds.append(round1)
 
         # Check if consensus already reached
         if round1["round_confidence"] >= (100 - CONSENSUS_THRESHOLD):
             logger.info("Consensus reached after Round 1 — skipping further rounds")
-            return await self._finalize(all_rounds, current_outputs, query, state)
+            return await self._finalize(all_rounds, current_outputs, query, state, tracer)
 
         # Round 2: Challenge & Counter
-        round2 = await self._round_challenge(current_outputs, query, context)
+        t0 = _time.monotonic()
+        with tracer.trace_debate_round(2, phase="challenge"):
+            round2 = await self._round_challenge(current_outputs, query, context)
+        latency2 = (_time.monotonic() - t0) * 1000
+        record_debate_round(session_id, 2, "challenge", round2["round_confidence"], 0, latency2)
         all_rounds.append(round2)
 
         # Update outputs with challenged positions
@@ -122,13 +137,17 @@ class DebateEngine:
 
         if round2["round_confidence"] >= (100 - CONSENSUS_THRESHOLD):
             logger.info("Consensus reached after Round 2 — skipping Round 3")
-            return await self._finalize(all_rounds, current_outputs, query, state)
+            return await self._finalize(all_rounds, current_outputs, query, state, tracer)
 
         # Round 3: Validation & Synthesis
-        round3 = await self._round_validation(current_outputs, query, context)
+        t0 = _time.monotonic()
+        with tracer.trace_debate_round(3, phase="validation"):
+            round3 = await self._round_validation(current_outputs, query, context)
+        latency3 = (_time.monotonic() - t0) * 1000
+        record_debate_round(session_id, 3, "validation", round3["round_confidence"], 0, latency3)
         all_rounds.append(round3)
 
-        return await self._finalize(all_rounds, current_outputs, query, state)
+        return await self._finalize(all_rounds, current_outputs, query, state, tracer)
 
     # -----------------------------------------------------------------------
     # Round 1: Parallel Analysis Summary
@@ -268,7 +287,7 @@ class DebateEngine:
     # -----------------------------------------------------------------------
     # Final synthesis
     # -----------------------------------------------------------------------
-    async def _finalize(self, rounds: list[dict], outputs: list[AgentOutput], query: str, state: CouncilState) -> dict:
+    async def _finalize(self, rounds: list[dict], outputs: list[AgentOutput], query: str, state: CouncilState, tracer: CouncilTracer = None) -> dict:
         """Synthesize final recommendation from debate rounds."""
         debate_summary = self._format_debate_summary(rounds)
         last_round = rounds[-1]
@@ -296,8 +315,10 @@ class DebateEngine:
 
         messages.append({"role": "user", "content": f"Synthesize final recommendation for: {query}"})
 
+        t0 = _time.monotonic()
         try:
-            response, model_used = await llm_router.invoke_with_fallback("moderator", messages)
+            with (tracer.trace_debate_round(0, phase="synthesis") if tracer else _null_ctx()):
+                response, model_used = await llm_router.invoke_with_fallback("moderator", messages)
             recommendation = response.content
             # Parse confidence and risk from response
             final_confidence = self._parse_confidence(response.content, last_round.get("round_confidence", 50))
@@ -307,6 +328,9 @@ class DebateEngine:
             recommendation = f"Synthesis failed: {e}"
             final_confidence = last_round.get("round_confidence", 0)
             risk_score = 50
+        latency_ms = (_time.monotonic() - t0) * 1000
+        if tracer:
+            record_debate_round(state.get("session_id", ""), 0, "synthesis", final_confidence, risk_score, latency_ms)
 
         # Generate fallback options from debate
         fallbacks = self._generate_fallbacks(outputs, risk_score)
@@ -472,6 +496,12 @@ class DebateEngine:
             ).model_dump())
 
         return fallbacks
+
+
+class _null_ctx:
+    """No-op context manager for optional tracer."""
+    def __enter__(self): return self
+    def __exit__(self, *a): pass
 
 
 # ---------------------------------------------------------------------------

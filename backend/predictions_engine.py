@@ -13,10 +13,12 @@ Returns predictions with confidence intervals.
 import math
 import random
 import logging
+import time as _time
 from typing import Optional
 from datetime import datetime, timezone
 
 from backend.state import Prediction
+from backend.observability.langsmith_config import CouncilTracer, record_agent_call
 
 logger = logging.getLogger(__name__)
 
@@ -267,34 +269,46 @@ async def ensemble_predict(
     """
     historical_data = historical_data or []
     predictions = []
+    tracer = CouncilTracer(f"predictions_{agent_name}")
 
     # 1. Prophet forecast
+    t0 = _time.monotonic()
     try:
-        prophet_pred = await prophet_forecast(historical_data, metric, horizon_days)
+        with tracer.trace_agent(agent_name, round_number=0, method="prophet"):
+            prophet_pred = await prophet_forecast(historical_data, metric, horizon_days)
         predictions.append(prophet_pred)
     except Exception as e:
         logger.warning(f"Prophet forecast failed: {e}")
+    latency_prophet = (_time.monotonic() - t0) * 1000
+    record_agent_call(agent_name, f"predictions_{agent_name}", "prophet", latency_ms=latency_prophet)
 
     # 2. LSTM stub
+    t0 = _time.monotonic()
     try:
-        lstm_pred = await lstm_forecast(historical_data, metric, horizon_days)
+        with tracer.trace_agent(agent_name, round_number=0, method="lstm_stub"):
+            lstm_pred = await lstm_forecast(historical_data, metric, horizon_days)
         predictions.append(lstm_pred)
     except Exception as e:
         logger.warning(f"LSTM forecast failed: {e}")
+    latency_lstm = (_time.monotonic() - t0) * 1000
+    record_agent_call(agent_name, f"predictions_{agent_name}", "lstm_stub", latency_ms=latency_lstm)
 
     # 3. Monte Carlo disruption probability
     if metric in ("disruption_probability", "risk", "lead_time"):
+        t0 = _time.monotonic()
         try:
-            # Get historical disruptions from RAG
-            rag_disruptions = await _get_rag_disruptions(query, agent_name)
-            mc_pred = await monte_carlo_disruption(
-                base_probability=0.3,
-                horizon_days=horizon_days,
-                historical_disruptions=rag_disruptions,
-            )
+            with tracer.trace_agent(agent_name, round_number=0, method="monte_carlo"):
+                rag_disruptions = await _get_rag_disruptions(query, agent_name)
+                mc_pred = await monte_carlo_disruption(
+                    base_probability=0.3,
+                    horizon_days=horizon_days,
+                    historical_disruptions=rag_disruptions,
+                )
             predictions.append(mc_pred)
         except Exception as e:
             logger.warning(f"Monte Carlo simulation failed: {e}")
+        latency_mc = (_time.monotonic() - t0) * 1000
+        record_agent_call(agent_name, f"predictions_{agent_name}", "monte_carlo", latency_ms=latency_mc)
 
     # 4. Ensemble (weighted average)
     if len(predictions) >= 2:

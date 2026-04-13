@@ -425,3 +425,8 @@ class Settings(BaseModel):
 - [x] Yahoo Finance fallback for commodity prices
 - [x] Settings: Live API status indicators
 - [x] All dummy data removed from frontend
+- [x] Brand Agent enhanced: confidence parsing, sentiment analysis, crisis comms, ad pivot, MCP data grounding
+- [x] LangSmith tracing wired into debate_engine, predictions_engine, fallback_engine
+- [x] `/ws/debate/{session_id}` WebSocket route added (path-parameterized session ID)
+- [x] Observability routes fixed: asyncio + run_council_streaming imports
+- [x] 54/54 core engine tests passing

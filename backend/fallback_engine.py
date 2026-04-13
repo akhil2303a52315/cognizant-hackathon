@@ -12,10 +12,12 @@ Each fallback has:
 """
 
 import logging
+import time as _time
 from typing import Optional
 from datetime import datetime, timezone
 
 from backend.state import CouncilState, FallbackOption, AgentOutput
+from backend.observability.langsmith_config import CouncilTracer, record_mcp_call
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +158,10 @@ class FallbackEngine:
         risk_score = state.get("risk_score", 50)
         query = state.get("query", "")
         debate_rounds = state.get("debate_rounds", [])
+        session_id = state.get("session_id", "unknown")
+
+        tracer = CouncilTracer(session_id)
+        t0 = _time.monotonic()
 
         # Determine which tiers are needed based on risk
         selected = []
@@ -178,6 +184,11 @@ class FallbackEngine:
 
         # Sort by tier, then by ROI descending
         selected.sort(key=lambda f: (f["tier"], -f["roi_pct"]))
+
+        latency_ms = (_time.monotonic() - t0) * 1000
+        with tracer.trace_debate_round(0, phase="fallback_generation", num_fallbacks=len(selected)):
+            pass
+        logger.info(f"Fallback generation: {len(selected)} options in {latency_ms:.0f}ms")
 
         return {"tiered_fallbacks": selected}
 
@@ -263,7 +274,11 @@ class FallbackEngine:
 
         try:
             from backend.mcp.secure_mcp import secure_invoke
-            result = await secure_invoke(agent_name, tool_name, params)
+            t0 = _time.monotonic()
+            with CouncilTracer(f"{agent_name}_fallback").trace_mcp_call(tool_name, agent=agent_name):
+                result = await secure_invoke(agent_name, tool_name, params)
+            latency_ms = (_time.monotonic() - t0) * 1000
+            record_mcp_call(tool_name, agent_name, latency_ms, success=result.get("success", False))
 
             if result.get("success"):
                 logger.info(f"Fallback '{fallback['name']}' executed via {tool_name}")

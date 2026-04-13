@@ -6,6 +6,7 @@ Endpoints:
   - WebSocket /observability/ws/debate — real-time streaming of debate rounds
 """
 
+import asyncio
 import json
 import time
 import logging
@@ -19,6 +20,7 @@ from backend.observability.langsmith_config import (
     metrics, CouncilTracer, generate_prometheus_metrics,
     record_debate_round, record_agent_call, record_mcp_call,
 )
+from backend.graph import run_council_streaming
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +246,6 @@ async def debate_websocket(websocket: WebSocket):
         except Exception:
             pass
 
-    import asyncio
     heartbeat_task = asyncio.create_task(heartbeat())
 
     try:
@@ -319,6 +320,103 @@ async def debate_websocket(websocket: WebSocket):
         logger.info("Debate WebSocket disconnected")
     except Exception as e:
         logger.error(f"Debate WebSocket error: {e}")
+    finally:
+        if heartbeat_task:
+            heartbeat_task.cancel()
+
+
+# ---------------------------------------------------------------------------
+# WebSocket /ws/debate/{session_id} — debate streaming with session ID in path
+# ---------------------------------------------------------------------------
+@router.websocket("/ws/debate/{session_id}")
+async def debate_websocket_with_session(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for real-time debate streaming with session ID in URL path.
+
+    Protocol:
+      1. Client connects to /ws/debate/{session_id}?api_key=...
+      2. Client sends: {"action": "start", "query": "..."}
+      3. Server streams debate events (same format as /ws/debate)
+      4. Heartbeat every 30s
+    """
+    import os
+    import uuid
+    api_key = websocket.query_params.get("api_key") or websocket.headers.get("x-api-key", "")
+    valid_keys = os.getenv("API_KEYS", "dev-key").split(",")
+    if api_key and api_key not in valid_keys:
+        await websocket.close(code=4001, reason="Invalid API key")
+        return
+
+    await websocket.accept()
+
+    heartbeat_task = None
+
+    async def heartbeat():
+        try:
+            while True:
+                await asyncio.sleep(settings.ws_heartbeat_interval)
+                await websocket.send_json({"type": "heartbeat", "ts": time.time()})
+        except Exception:
+            pass
+
+    heartbeat_task = asyncio.create_task(heartbeat())
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            action = data.get("action", "")
+
+            if action == "start":
+                query = data.get("query", "")
+                context = data.get("context")
+                if not query:
+                    await websocket.send_json({"type": "error", "message": "Query is required"})
+                    continue
+
+                async def ws_push(payload: dict):
+                    try:
+                        await websocket.send_json(payload)
+                    except Exception:
+                        pass
+
+                await websocket.send_json({
+                    "type": "start",
+                    "session_id": session_id,
+                    "query": query,
+                })
+
+                async for payload in run_council_streaming(
+                    query=query,
+                    context=context,
+                    session_id=session_id,
+                    ws_callback=ws_push,
+                ):
+                    try:
+                        await websocket.send_json(payload)
+                    except Exception:
+                        break
+
+                await websocket.send_json({"type": "done", "session_id": session_id})
+
+            elif action == "approve":
+                await websocket.send_json({
+                    "type": "approved",
+                    "session_id": session_id,
+                    "message": "Human approval received. Continuing synthesis...",
+                })
+
+            elif action == "ping":
+                await websocket.send_json({"type": "pong", "ts": time.time()})
+
+            else:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"Unknown action: {action}. Use 'start', 'approve', or 'ping'.",
+                })
+
+    except WebSocketDisconnect:
+        logger.info(f"Debate WebSocket disconnected: session={session_id}")
+    except Exception as e:
+        logger.error(f"Debate WebSocket error: session={session_id}, error={e}")
     finally:
         if heartbeat_task:
             heartbeat_task.cancel()
