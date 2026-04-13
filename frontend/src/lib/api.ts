@@ -5,7 +5,7 @@ const API_BASE = '/api'
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: 120000,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -42,7 +42,7 @@ api.interceptors.response.use(
 // MCP client — separate instance with MCP API key
 const mcpApi = axios.create({
   baseURL: '/mcp',
-  timeout: 30000,
+  timeout: 120000,
   headers: { 'Content-Type': 'application/json' },
 })
 

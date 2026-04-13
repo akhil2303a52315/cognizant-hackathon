@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     openrouter_api_key: str = ""
     nvidia_api_key: str = ""
-    google_api_key: str = ""
     cohere_api_key: str = ""
     sambanova_api_key: str = ""
 
@@ -42,7 +41,6 @@ class Settings(BaseSettings):
     finnhub_api_key: str = ""
     fred_api_key: str = ""
     bytez_api_key: str = ""
-    gemini_api_key: str = ""
     comtrade_api_key: str = ""
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
@@ -68,6 +66,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 settings = Settings()

@@ -1,17 +1,53 @@
 import { useState } from 'react'
-import { Flame, ArrowRight } from 'lucide-react'
-import { useCouncilQuery } from '@/hooks/useCouncilQuery'
+import { Flame, ArrowRight, StopCircle, Download } from 'lucide-react'
+import { useCouncilStream } from '@/hooks/useCouncilStream'
 import MarkdownRenderer from '@/components/shared/MarkdownRenderer'
-import LoadingSkeleton from '@/components/shared/LoadingSkeleton'
+import ConfidenceBar from '@/components/shared/ConfidenceBar'
+import { councilApi } from '@/lib/api'
+
+const AGENT_COLORS: Record<string, string> = {
+  risk: 'text-risk-red',
+  supply: 'text-supply-blue',
+  logistics: 'text-yellow-400',
+  market: 'text-council-purple',
+  finance: 'text-success-green',
+  brand: 'text-pink-400',
+  moderator: 'text-council-purple',
+}
+
+const AGENT_LABELS: Record<string, string> = {
+  risk: 'Risk Analyst',
+  supply: 'Supply Analyst',
+  logistics: 'Logistics Expert',
+  market: 'Market Strategist',
+  finance: 'Finance Advisor',
+  brand: 'Brand Guardian',
+  moderator: 'Council Moderator',
+}
 
 export default function Debate() {
   const [query, setQuery] = useState('')
-  const mutation = useCouncilQuery()
+  const { startStream, stopStream, isStreaming, agentOutputs, currentSession } = useCouncilStream()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!query.trim()) return
-    mutation.mutate(query.trim())
+    if (!query.trim() || isStreaming) return
+    startStream(query.trim())
+  }
+
+  const handleExport = async () => {
+    if (!currentSession?.session_id) return
+    try {
+      const { data } = await councilApi.exportPdf(currentSession.session_id)
+      const url = URL.createObjectURL(data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `debate_${currentSession.session_id.slice(0, 8)}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // handle error
+    }
   }
 
   return (
@@ -21,7 +57,7 @@ export default function Debate() {
           <Flame className="w-6 h-6 text-council-purple" />
           Council Debate
         </h1>
-        <p className="text-gray-400 text-sm">Full multi-round debate with all agents</p>
+        <p className="text-gray-400 text-sm">Full multi-round debate with all agents — streaming in real-time</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-2 mb-6">
@@ -31,45 +67,63 @@ export default function Debate() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Enter a supply chain question for full debate..."
           className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-council-purple"
+          disabled={isStreaming}
         />
-        <button
-          type="submit"
-          disabled={mutation.isPending || !query.trim()}
-          className="px-4 py-3 bg-council-purple rounded-lg text-white hover:bg-council-purple-dark transition-colors disabled:opacity-50 flex items-center gap-2"
-        >
-          <ArrowRight className="w-5 h-5" />
-          Debate
-        </button>
+        {isStreaming ? (
+          <button
+            type="button"
+            onClick={stopStream}
+            className="px-4 py-3 bg-risk-red rounded-lg text-white hover:bg-red-600 transition-colors flex items-center gap-2"
+          >
+            <StopCircle className="w-5 h-5" />
+            Stop
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!query.trim()}
+            className="px-4 py-3 bg-council-purple rounded-lg text-white hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            <ArrowRight className="w-5 h-5" />
+            Debate
+          </button>
+        )}
+        {currentSession?.session_id && !isStreaming && (
+          <button
+            type="button"
+            onClick={handleExport}
+            className="px-4 py-3 bg-gray-800 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
+            title="Export PDF"
+          >
+            <Download className="w-5 h-5" />
+          </button>
+        )}
       </form>
 
-      {mutation.isPending && <LoadingSkeleton variant="card" count={4} />}
-
-      {mutation.data && (
-        <div className="space-y-4">
-          <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-            <h2 className="text-lg font-semibold text-council-purple mb-2">Recommendation</h2>
-            <MarkdownRenderer content={mutation.data.recommendation || 'No recommendation'} />
-            {mutation.data.confidence != null && (
-              <p className="text-sm text-gray-400 mt-2">Confidence: {(mutation.data.confidence * 100).toFixed(0)}%</p>
-            )}
-          </div>
-
-          {mutation.data.agent_outputs?.map((ao: { agent?: string; name?: string; output?: string; content?: string }, i: number) => (
-            <div key={i} className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-              <h3 className="text-sm font-semibold text-supply-blue uppercase mb-2">
-                {String(ao.agent || ao.name || `Agent ${i + 1}`)}
+      {/* Streaming Agent Outputs */}
+      <div className="space-y-4">
+        {Object.entries(agentOutputs).map(([agent, output]) => (
+          <div key={agent} className="bg-gray-900 rounded-lg border border-gray-800 p-4 animate-fade-in">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className={`font-semibold text-sm uppercase ${AGENT_COLORS[agent] || 'text-gray-300'}`}>
+                {AGENT_LABELS[agent] || agent}
               </h3>
-              <MarkdownRenderer content={String(ao.output || ao.content || '')} />
+              {agent === 'moderator' && currentSession?.confidence != null && (
+                <ConfidenceBar value={currentSession.confidence} size="sm" />
+              )}
             </div>
-          ))}
-        </div>
-      )}
+            <MarkdownRenderer content={output} />
+          </div>
+        ))}
 
-      {mutation.isError && (
-        <div className="bg-risk-red/10 border border-risk-red/30 rounded-lg p-4 text-risk-red">
-          Error: {String(mutation.error)}
-        </div>
-      )}
+        {isStreaming && !Object.keys(agentOutputs).length && (
+          <div className="bg-gray-900 rounded-lg border border-gray-800 p-4 animate-pulse">
+            <div className="h-4 bg-gray-700 rounded w-1/3 mb-3" />
+            <div className="h-3 bg-gray-700 rounded w-full mb-2" />
+            <div className="h-3 bg-gray-700 rounded w-5/6" />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
