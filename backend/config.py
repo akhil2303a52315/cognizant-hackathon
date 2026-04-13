@@ -36,9 +36,16 @@ class Settings(BaseSettings):
     langchain_api_key: str = ""
     langchain_project: str = "supplychaingpt-council"
 
-    # External
+    # External Data APIs
     newsapi_key: str = ""
     firecrawl_api_key: str = ""
+    finnhub_api_key: str = ""
+    fred_api_key: str = ""
+    bytez_api_key: str = ""
+    gemini_api_key: str = ""
+    comtrade_api_key: str = ""
+    reddit_client_id: str = ""
+    reddit_client_secret: str = ""
 
     # App
     cors_origins: str = "http://localhost:3000,http://localhost:8000"

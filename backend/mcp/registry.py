@@ -87,9 +87,36 @@ def _register_all_tools():
     from backend.mcp.tools.finance_tools import register as reg_finance
     from backend.mcp.tools.social_tools import register as reg_social
     from backend.mcp.tools.firecrawl_tools import register as reg_firecrawl
+    from backend.mcp.tools.gdelt_tools import TOOLS as gdelt_tools
+    from backend.mcp.tools.finnhub_tools import TOOLS as finnhub_tools
+    from backend.mcp.tools.fred_tools import TOOLS as fred_tools
+    from backend.mcp.tools.frankfurter_tools import TOOLS as frankfurter_tools
+    from backend.mcp.tools.weather_tools import TOOLS as weather_tools
+    from backend.mcp.tools.knowledge_tools import TOOLS as knowledge_tools
+    from backend.mcp.tools.trade_tools import TOOLS as trade_tools
 
     for reg in [reg_news, reg_supplier, reg_shipping, reg_commodity, reg_finance, reg_social, reg_firecrawl]:
         reg()
+
+    # Register new real-data MCP tools
+    for tool_list, category in [
+        (gdelt_tools, "geopolitical"),
+        (finnhub_tools, "financial"),
+        (fred_tools, "economic"),
+        (frankfurter_tools, "forex"),
+        (weather_tools, "disaster"),
+        (knowledge_tools, "knowledge"),
+        (trade_tools, "trade"),
+    ]:
+        for t in tool_list:
+            register_tool(
+                name=t["name"],
+                description=t["description"],
+                input_schema=t["input_schema"],
+                handler=t["handler"],
+                category=category,
+                cache_ttl=t.get("cache_ttl", 3600),
+            )
 
     register_tool(
         name="rag_query",
