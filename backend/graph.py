@@ -13,13 +13,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Day 3: RAG Pre-fetch node
+# ---------------------------------------------------------------------------
 async def rag_prefetch(state: CouncilState) -> dict:
-    """RAG pre-fetch node: fetch context for all agents before fan-out.
-
-    Runs Agentic RAG + Graph RAG for the query and stores per-agent
-    context in state['context']['rag_contexts'] so each agent can
-    inject it into their LLM messages.
-    """
+    """RAG pre-fetch node: fetch context for all agents before fan-out."""
     query = state.get("query", "")
     if not query:
         return {"context": {**(state.get("context") or {}), "rag_contexts": {}}}
@@ -34,22 +32,17 @@ async def rag_prefetch(state: CouncilState) -> dict:
         return {"context": {**(state.get("context") or {}), "rag_contexts": {}}}
 
 
+# ---------------------------------------------------------------------------
+# Day 4: MCP Escalation node
+# ---------------------------------------------------------------------------
 async def mcp_escalation(state: CouncilState) -> dict:
-    """MCP escalation node: auto-call MCP tools for agents with low RAG confidence.
-
-    Runs after RAG pre-fetch. Checks each agent's RAG confidence and
-    calls relevant MCP tools for agents below their confidence threshold.
-    Stores MCP results in state['context']['mcp_contexts'] and
-    RAG confidence metadata in state['context']['rag_meta'].
-    """
+    """MCP escalation node: auto-call MCP tools for agents with low RAG confidence."""
     query = state.get("query", "")
     context = state.get("context") or {}
     rag_contexts = context.get("rag_contexts") or {} if context else {}
 
-    # Extract RAG confidence from each agent's context (heuristic)
     rag_meta = {}
     for agent_name, rag_ctx in rag_contexts.items():
-        # Parse confidence from the RAG context string
         confidence = 0.0
         if "confidence:" in rag_ctx:
             try:
@@ -76,6 +69,110 @@ async def mcp_escalation(state: CouncilState) -> dict:
         return {"context": {**context, "rag_meta": rag_meta, "mcp_contexts": {}}}
 
 
+# ---------------------------------------------------------------------------
+# Day 5: Predictions node
+# ---------------------------------------------------------------------------
+async def predictions_node(state: CouncilState) -> dict:
+    """Generate ensemble predictions (price, disruption, lead time) for the debate."""
+    query = state.get("query", "")
+    if not query:
+        return {"predictions": []}
+
+    try:
+        from backend.predictions_engine import generate_predictions_for_debate
+        preds = await generate_predictions_for_debate(query, state)
+        logger.info(f"Generated {len(preds)} predictions")
+        return {"predictions": preds}
+    except Exception as e:
+        logger.warning(f"Predictions node failed: {e}")
+        return {"predictions": []}
+
+
+# ---------------------------------------------------------------------------
+# Day 5: Debate Engine node
+# ---------------------------------------------------------------------------
+async def debate_node(state: CouncilState) -> dict:
+    """Run the 3-round structured debate engine.
+
+    After all agents have contributed, the DebateEngine orchestrates:
+      Round 1: Parallel Analysis summary
+      Round 2: Challenge & Counter phase
+      Round 3: Validation & Synthesis
+
+    Produces: debate_rounds, confidence, risk_score, recommendation, fallback_options
+    """
+    try:
+        from backend.debate_engine import debate_engine
+        result = await debate_engine.run_debate(state)
+        logger.info(
+            f"Debate complete: {len(result.get('debate_rounds', []))} rounds, "
+            f"confidence={result.get('confidence', 0):.2f}, "
+            f"risk={result.get('risk_score', 0):.1f}"
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Debate engine failed: {e}")
+        return {
+            "debate_rounds": [],
+            "confidence": 0.0,
+            "risk_score": 50.0,
+            "recommendation": f"Debate engine failed: {e}",
+            "fallback_options": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Day 5: Fallback Engine node
+# ---------------------------------------------------------------------------
+async def fallback_node(state: CouncilState) -> dict:
+    """Generate tiered fallback options based on debate and prediction results."""
+    try:
+        from backend.fallback_engine import fallback_engine
+        result = await fallback_engine.generate_fallbacks(state)
+        n = len(result.get("tiered_fallbacks", []))
+        logger.info(f"Generated {n} tiered fallback options")
+        return result
+    except Exception as e:
+        logger.warning(f"Fallback engine failed: {e}")
+        return {"tiered_fallbacks": []}
+
+
+# ---------------------------------------------------------------------------
+# Day 5: Brand Enhancement node
+# ---------------------------------------------------------------------------
+async def brand_enhancement_node(state: CouncilState) -> dict:
+    """Run brand sentiment analysis, crisis comms, ad pivot, and competitor analysis."""
+    try:
+        from backend.brand_agent_enhancement import brand_enhancer
+        result = await brand_enhancer.run_full_enhancement(state)
+        sentiment = result.get("brand_sentiment", {})
+        logger.info(f"Brand enhancement: sentiment={sentiment.get('overall_sentiment', 'unknown')}")
+        return result
+    except Exception as e:
+        logger.warning(f"Brand enhancement failed: {e}")
+        return {"brand_sentiment": None}
+
+
+# ---------------------------------------------------------------------------
+# Day 5: Conditional edge — should we run brand enhancement?
+# ---------------------------------------------------------------------------
+def needs_brand_enhancement(state: CouncilState) -> str:
+    """Route to brand enhancement if brand agent detected negative sentiment."""
+    agent_outputs = state.get("agent_outputs", [])
+    for o in agent_outputs:
+        if o.agent == "brand" and o.confidence < 50:
+            return "brand_enhancement"
+    # Check if query mentions brand/reputation/PR keywords
+    query = (state.get("query") or "").lower()
+    brand_keywords = ["brand", "reputation", "pr", "crisis", "sentiment", "social media", "consumer"]
+    if any(kw in query for kw in brand_keywords):
+        return "brand_enhancement"
+    return "skip_brand"
+
+
+# ---------------------------------------------------------------------------
+# Build the full council graph
+# ---------------------------------------------------------------------------
 def build_council_graph() -> StateGraph:
     graph = StateGraph(CouncilState)
 
@@ -89,22 +186,37 @@ def build_council_graph() -> StateGraph:
     graph.add_node("market", market_agent)
     graph.add_node("finance", finance_agent)
     graph.add_node("brand", brand_agent)
+    graph.add_node("predictions", predictions_node)
+    graph.add_node("debate", debate_node)
+    graph.add_node("fallback", fallback_node)
+    graph.add_node("brand_enhancement", brand_enhancement_node)
     graph.add_node("synthesize", moderator_synthesize)
 
     graph.set_entry_point("moderator")
 
-    # Moderator → RAG pre-fetch → MCP escalation → agent fan-out
+    # Phase 1: Moderator → RAG → MCP → Agent fan-out
     graph.add_edge("moderator", "rag_prefetch")
     graph.add_edge("rag_prefetch", "mcp_escalation")
 
-    # Fan-out from MCP escalation to all 6 domain agents
     for agent in ["risk", "supply", "logistics", "market", "finance", "brand"]:
         graph.add_edge("mcp_escalation", agent)
-        graph.add_conditional_edges(agent, should_debate, {
-            "debate": "moderator",
-            "synthesize": "synthesize",
-        })
 
+    # Phase 2: After all agents → Predictions → Debate → Fallback
+    # All agents converge to predictions node
+    for agent in ["risk", "supply", "logistics", "market", "finance", "brand"]:
+        graph.add_edge(agent, "predictions")
+
+    graph.add_edge("predictions", "debate")
+    graph.add_edge("debate", "fallback")
+
+    # Phase 3: Conditional brand enhancement
+    graph.add_conditional_edges("fallback", needs_brand_enhancement, {
+        "brand_enhancement": "brand_enhancement",
+        "skip_brand": "synthesize",
+    })
+    graph.add_edge("brand_enhancement", "synthesize")
+
+    # Final synthesis
     graph.add_edge("synthesize", END)
 
     return graph

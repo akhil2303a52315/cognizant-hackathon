@@ -25,6 +25,57 @@ class Action(BaseModel):
     time_to_implement: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# Day 5: Debate Engine models
+# ---------------------------------------------------------------------------
+class DebateRound(BaseModel):
+    """Structured output for a single debate round."""
+    round_number: int
+    phase: str  # "analysis" | "challenge" | "validation"
+    agent_contributions: List[dict]  # [{agent, point, confidence, challenges}]
+    key_disagreements: List[str]
+    consensus_points: List[str]
+    round_confidence: float  # 0-100 average across agents
+
+
+class FallbackOption(BaseModel):
+    """Tiered fallback option with cost/ROI analysis."""
+    tier: int  # 1=immediate, 2=short-term, 3=strategic
+    name: str
+    description: str
+    cost_estimate_usd: float
+    time_to_implement_days: int
+    risk_reduction_pct: float
+    roi_pct: float
+    confidence: float
+    mcp_tool: Optional[str] = None  # MCP tool for one-click execution
+    mcp_params: Optional[dict] = None
+
+
+class Prediction(BaseModel):
+    """Ensemble prediction with confidence intervals."""
+    metric: str  # e.g. "price", "disruption_probability", "lead_time"
+    horizon_days: int
+    point_estimate: float
+    ci_lower: float  # 95% CI lower
+    ci_upper: float  # 95% CI upper
+    confidence: float  # 0-1
+    method: str  # "prophet" | "lstm_stub" | "monte_carlo" | "ensemble"
+    data_points_used: int
+
+
+class BrandSentiment(BaseModel):
+    """Real-time brand sentiment analysis result."""
+    overall_sentiment: str  # "positive" | "neutral" | "negative" | "crisis"
+    sentiment_score: float  # -1.0 to 1.0
+    trending_topics: List[str]
+    crisis_keywords: List[str]
+    recommended_actions: List[str]
+    crisis_comm_draft: Optional[str] = None
+    ad_pivot_recommendation: Optional[str] = None
+    competitor_activity: Optional[str] = None
+
+
 def _list_reducer(current: list, update: list) -> list:
     return current + update if current else (update or [])
 
@@ -43,3 +94,9 @@ class CouncilState(TypedDict):
     llm_calls_log: Annotated[List[dict], operator.add]
     session_id: Optional[str]
     context: Optional[dict]
+    # Day 5 additions
+    debate_rounds: Annotated[List[dict], operator.add]  # DebateRound dicts
+    predictions: Annotated[List[dict], operator.add]  # Prediction dicts
+    tiered_fallbacks: Annotated[List[dict], operator.add]  # FallbackOption dicts
+    brand_sentiment: Optional[dict]  # BrandSentiment dict
+    human_approved: Optional[bool]
