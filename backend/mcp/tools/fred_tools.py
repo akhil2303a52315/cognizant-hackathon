@@ -49,6 +49,47 @@ def _mock_commodity_price(commodity: str) -> dict:
     }
 
 
+# Yahoo Finance tickers for commodity fallback
+YAHOO_COMMODITY_TICKERS = {
+    "crude_oil": "BZ=F", "wti_oil": "CL=F", "copper": "HG=F",
+    "natural_gas": "NG=F", "container_freight": None,
+    "industrial_commodities": None, "aluminum": "ALI=F", "steel": None,
+}
+
+
+async def _yahoo_commodity_fallback(commodity: str) -> dict:
+    """Fallback: Use Yahoo Finance API for commodity prices when FRED key is invalid."""
+    ticker = YAHOO_COMMODITY_TICKERS.get(commodity)
+    if not ticker:
+        return _mock_commodity_price(commodity)
+
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d"
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "SupplyChainGPT/1.0"})
+            if resp.status_code != 200:
+                return _mock_commodity_price(commodity)
+            data = resp.json()
+
+        result = data.get("chart", {}).get("result", [{}])[0]
+        meta = result.get("meta", {})
+        price = meta.get("regularMarketPrice", 0)
+        if not price:
+            return _mock_commodity_price(commodity)
+
+        return {
+            "commodity": commodity,
+            "series_id": f"YAHOO:{ticker}",
+            "price": round(float(price), 2),
+            "date": meta.get("regularMarketTime", ""),
+            "unit": "USD",
+            "source": "yahoo_finance",
+            "mock": False
+        }
+    except Exception:
+        return _mock_commodity_price(commodity)
+
+
 def _mock_economic_indicator(indicator: str) -> dict:
     return {
         "indicator": indicator,
@@ -70,7 +111,7 @@ async def commodity_price(params: dict) -> dict:
     series_id = FRED_SERIES.get(commodity, FRED_SERIES.get("crude_oil"))
 
     if not key:
-        return _mock_commodity_price(commodity)
+        return await _yahoo_commodity_fallback(commodity)
 
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
@@ -82,17 +123,17 @@ async def commodity_price(params: dict) -> dict:
                 "limit": 1
             })
             if resp.status_code != 200:
-                return _mock_commodity_price(commodity)
+                return await _yahoo_commodity_fallback(commodity)
             data = resp.json()
 
         observations = data.get("observations", [])
         if not observations:
-            return _mock_commodity_price(commodity)
+            return await _yahoo_commodity_fallback(commodity)
 
         latest = observations[0]
         val = latest.get("value", ".")
         if val == "." or val is None:
-            return _mock_commodity_price(commodity)
+            return await _yahoo_commodity_fallback(commodity)
 
         return {
             "commodity": commodity,
@@ -103,7 +144,7 @@ async def commodity_price(params: dict) -> dict:
             "mock": False
         }
     except Exception:
-        return _mock_commodity_price(commodity)
+        return await _yahoo_commodity_fallback(commodity)
 
 
 async def economic_indicator(params: dict) -> dict:

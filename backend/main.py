@@ -20,6 +20,7 @@ from backend.routes.ingest import router as ingest_router
 from backend.routes.optimize import router as optimize_router
 from backend.routes.settings import router as settings_router
 from backend.rag.api import router as rag_router
+from backend.routes.market import router as market_router
 from backend.ws.server import websocket_endpoint
 from fastapi.responses import FileResponse
 
@@ -95,6 +96,7 @@ app.include_router(ingest_router, prefix="/ingest", tags=["Ingest"])
 app.include_router(optimize_router, prefix="/optimize", tags=["Optimize"])
 app.include_router(settings_router, prefix="/settings", tags=["Settings"])
 app.include_router(rag_router, prefix="/rag", tags=["RAG"])
+app.include_router(market_router, tags=["Market"])
 
 # WebSocket
 app.websocket("/ws")(websocket_endpoint)

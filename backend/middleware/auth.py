@@ -5,12 +5,13 @@ import os
 
 API_KEYS = os.getenv("API_KEYS", "dev-key").split(",")
 MCP_API_KEYS = os.getenv("MCP_API_KEY", "dev-mcp-key").split(",")
-PUBLIC_ENDPOINTS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc", "/test"}
+PUBLIC_ENDPOINTS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc", "/test", "/market/ticker", "/market/risk-dashboard", "/market/brand-intel"}
+PUBLIC_PREFIXES = ("/market/company/",)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in PUBLIC_ENDPOINTS or request.method == "OPTIONS":
+        if request.url.path in PUBLIC_ENDPOINTS or request.method == "OPTIONS" or any(request.url.path.startswith(p) for p in PUBLIC_PREFIXES):
             return await call_next(request)
 
         if request.url.path.startswith("/mcp/"):

@@ -129,5 +129,13 @@ export const mcpApiMethods = {
     mcpApi.post(`/tools/${tool}/invoke`, params),
 }
 
+// --- Market (Real-Time Data) ---
+export const marketApi = {
+  ticker: () => api.get('/market/ticker'),
+  company: (symbol: string) => api.get(`/market/company/${symbol}`),
+  riskDashboard: () => api.get('/market/risk-dashboard'),
+  brandIntel: () => api.get('/market/brand-intel'),
+}
+
 export { api, mcpApi }
 export default api
