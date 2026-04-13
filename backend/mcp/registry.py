@@ -12,6 +12,7 @@ class ToolDefinition(BaseModel):
     handler: Callable | None = None
     category: str = "general"
     cache_ttl: int = 3600
+    allowed_agents: list[str] = []  # empty = all agents allowed
 
     class Config:
         arbitrary_types_allowed = True
@@ -27,7 +28,16 @@ def register_tool(
     handler: Callable,
     category: str = "general",
     cache_ttl: int = 3600,
+    allowed_agents: list[str] = None,
 ):
+    # Auto-populate allowed_agents from mcp_servers if not specified
+    if allowed_agents is None:
+        try:
+            from backend.mcp.mcp_servers import is_tool_allowed_for_agent, AGENT_SERVER_MAP
+            allowed_agents = [a for a in AGENT_SERVER_MAP if is_tool_allowed_for_agent(name, a)]
+        except Exception:
+            allowed_agents = []
+
     _registry[name] = ToolDefinition(
         name=name,
         description=description,
@@ -35,8 +45,9 @@ def register_tool(
         handler=handler,
         category=category,
         cache_ttl=cache_ttl,
+        allowed_agents=allowed_agents,
     )
-    logger.info(f"Registered MCP tool: {name} [{category}]")
+    logger.info(f"Registered MCP tool: {name} [{category}] (agents: {allowed_agents})")
 
 
 def list_tools() -> list[dict]:
@@ -46,6 +57,7 @@ def list_tools() -> list[dict]:
             "description": t.description,
             "input_schema": t.input_schema,
             "category": t.category,
+            "allowed_agents": t.allowed_agents,
         }
         for t in _registry.values()
     ]
@@ -61,6 +73,7 @@ def get_tool(name: str) -> dict | None:
         "input_schema": t.input_schema,
         "category": t.category,
         "cache_ttl": t.cache_ttl,
+        "allowed_agents": t.allowed_agents,
     }
 
 
@@ -134,6 +147,41 @@ def _register_all_tools():
         cache_ttl=300,
     )
 
+    register_tool(
+        name="agentic_rag_query",
+        description="Run the full Agentic (Corrective) RAG pipeline: retrieve, critique, self-reflect, and optionally escalate to MCP. Returns context, sources, and confidence score.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "agent": {"type": "string", "description": "Agent domain (risk/supply/logistics/market/finance/brand)", "default": "risk"},
+                "top_k": {"type": "integer", "description": "Number of results to retrieve", "default": 6},
+            },
+            "required": ["query"],
+        },
+        handler=_agentic_rag_handler,
+        category="rag",
+        cache_ttl=300,
+    )
+
+    register_tool(
+        name="graph_rag_v2",
+        description="Run HybridCypherRetriever for multi-tier supplier graph traversal (Tier-1/2/3) combined with vector search. Returns structured supplier data, component dependencies, and risk propagation paths.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query for supplier graph"},
+                "use_llm_extraction": {"type": "boolean", "description": "Use LLM for entity extraction", "default": True},
+                "combine_with_vector": {"type": "boolean", "description": "Combine with vector search", "default": True},
+                "top_k": {"type": "integer", "description": "Number of results", "default": 10},
+            },
+            "required": ["query"],
+        },
+        handler=_graph_rag_v2_handler,
+        category="rag",
+        cache_ttl=300,
+    )
+
 
 async def _rag_query_handler(params: dict):
     try:
@@ -142,6 +190,37 @@ async def _rag_query_handler(params: dict):
         return {"chunks": results}
     except Exception as e:
         return {"chunks": [], "error": str(e)}
+
+
+async def _agentic_rag_handler(params: dict):
+    try:
+        from backend.rag.agent_rag_integration import get_agent_rag
+        agent = params.get("agent", "risk")
+        rag = get_agent_rag(agent)
+        result = await rag.run(params["query"], top_k=params.get("top_k", 6))
+        return result
+    except Exception as e:
+        return {"context": "", "sources": [], "confidence": 0.0, "error": str(e)}
+
+
+async def _graph_rag_v2_handler(params: dict):
+    try:
+        from backend.rag.graph_rag import get_graph_retriever
+        retriever = get_graph_retriever(
+            use_llm=params.get("use_llm_extraction", True),
+            combine_vector=params.get("combine_with_vector", True),
+        )
+        result = await retriever.retrieve(params["query"], top_k=params.get("top_k", 10))
+        formatted = retriever.format_graph_context(result)
+        return {
+            "graph_results": result["graph_results"],
+            "component_deps": result.get("component_deps", []),
+            "risk_propagation": result.get("risk_propagation", []),
+            "entities_found": result.get("entities_found", []),
+            "formatted_context": formatted,
+        }
+    except Exception as e:
+        return {"graph_results": {}, "entities_found": [], "error": str(e)}
 
 
 register_all_tools = _register_all_tools

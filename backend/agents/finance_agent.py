@@ -29,12 +29,37 @@ When responding, always provide:
 Format your response as structured analysis."""
 
 
+def _get_rag_context(state: CouncilState) -> str:
+    """Extract pre-fetched RAG context for this agent from state."""
+    context = state.get("context") or {}
+    rag_contexts = context.get("rag_contexts") or {}
+    return rag_contexts.get("finance", "")
+
+
 async def finance_agent(state: CouncilState) -> dict:
     query = state.get("query", "")
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"Analyze financial impact for: {query}"},
     ]
+
+    # Inject RAG context if available from pre-fetch node
+    rag_ctx = _get_rag_context(state)
+    if rag_ctx:
+        from backend.rag.agent_rag_integration import inject_rag_into_messages
+        messages = inject_rag_into_messages(messages, rag_ctx)
+
+    # Inject MCP tool availability + auto-escalation
+    try:
+        from backend.mcp.agent_mcp_integration import inject_mcp_system_prompt, auto_escalate_to_mcp, inject_mcp_results
+        messages = inject_mcp_system_prompt(messages, "finance")
+        context = state.get("context") or {}
+        rag_confidence = (context.get("rag_meta") or {}).get("finance", 0.0)
+        mcp_data = await auto_escalate_to_mcp("finance", query, rag_confidence=rag_confidence)
+        if mcp_data:
+            messages = inject_mcp_results(messages, mcp_data)
+    except Exception as e:
+        logger.warning(f"Finance agent MCP integration failed: {e}")
 
     try:
         response, model_used = await llm_router.invoke_with_fallback("finance", messages)

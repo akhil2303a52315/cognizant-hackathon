@@ -77,6 +77,14 @@ Synthesize a final unified recommendation. Weigh by confidence. Provide fallback
 """}
     ]
 
+    # Inject RAG context for moderator if available
+    context = state.get("context") or {}
+    rag_contexts = context.get("rag_contexts") or {}
+    moderator_rag = rag_contexts.get("moderator", "")
+    if moderator_rag:
+        from backend.rag.agent_rag_integration import inject_rag_into_messages
+        messages = inject_rag_into_messages(messages, moderator_rag)
+
     try:
         response, model_used = await llm_router.invoke_with_fallback("moderator", messages)
         return {

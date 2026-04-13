@@ -11,6 +11,10 @@ from backend.rag.vectorstore import add_documents, delete_collection, list_colle
 from backend.rag.generator import generate_answer
 from backend.rag.hybrid_rag import hybrid_rag_query
 from backend.rag.graph_rag import graph_rag_query
+from backend.rag.agentic_rag import AgenticRAG
+from backend.rag.graph_rag import HybridCypherRetriever, get_graph_retriever
+from backend.rag.agent_rag_integration import get_rag_context, get_agent_rag
+from backend.rag.rag_config import get_rag_settings, get_agent_profile
 from backend.db.neon import execute_query
 
 logger = logging.getLogger(__name__)
@@ -212,3 +216,105 @@ async def rag_health():
 
     all_ok = all(v == "ok" for v in checks.values())
     return {"status": "ok" if all_ok else "degraded", "checks": checks}
+
+
+# ---------------------------------------------------------------------------
+# Agentic RAG endpoints (Day 3)
+# ---------------------------------------------------------------------------
+class AgenticRAGRequest(BaseModel):
+    query: str
+    agent: Optional[str] = "risk"
+    top_k: Optional[int] = 6
+
+
+class AgentRAGContextRequest(BaseModel):
+    query: str
+    agent: str
+    include_graph: Optional[bool] = True
+
+
+class GraphRAGV2Request(BaseModel):
+    query: str
+    use_llm_extraction: Optional[bool] = True
+    combine_with_vector: Optional[bool] = True
+    top_k: Optional[int] = 10
+
+
+@router.post("/agentic-query")
+async def agentic_rag_query(request: AgenticRAGRequest):
+    """Run the full Agentic (Corrective) RAG pipeline for a specific agent."""
+    start = time.time()
+    try:
+        rag = get_agent_rag(request.agent)
+        result = await rag.run(request.query, top_k=request.top_k)
+        result["latency_ms"] = int((time.time() - start) * 1000)
+        result["agent"] = request.agent
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"Agentic RAG query failed: {e}")
+
+
+@router.post("/agent-context")
+async def agent_rag_context(request: AgentRAGContextRequest):
+    """Get combined Agentic + Graph RAG context for a specific agent."""
+    start = time.time()
+    try:
+        context = await get_rag_context(request.agent, request.query, include_graph=request.include_graph)
+        return {
+            "agent": request.agent,
+            "context": context,
+            "context_length": len(context),
+            "latency_ms": int((time.time() - start) * 1000),
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Agent RAG context failed: {e}")
+
+
+@router.post("/graph-query-v2")
+async def graph_rag_v2_query(request: GraphRAGV2Request):
+    """Run the upgraded HybridCypherRetriever with Tier-1/2/3 traversal."""
+    start = time.time()
+    try:
+        retriever = get_graph_retriever(
+            use_llm=request.use_llm_extraction,
+            combine_vector=request.combine_with_vector,
+        )
+        result = await retriever.retrieve(request.query, top_k=request.top_k)
+        formatted = retriever.format_graph_context(result)
+        return {
+            "graph_results": result["graph_results"],
+            "component_deps": result.get("component_deps", []),
+            "risk_propagation": result.get("risk_propagation", []),
+            "vector_context": result.get("vector_context", []),
+            "entities_found": result.get("entities_found", []),
+            "formatted_context": formatted,
+            "latency_ms": int((time.time() - start) * 1000),
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Graph RAG v2 query failed: {e}")
+
+
+@router.get("/config")
+async def rag_config_endpoint():
+    """Return current RAG configuration and agent profiles."""
+    return get_rag_settings()
+
+
+@router.get("/agent-profile/{agent_name}")
+async def agent_profile_endpoint(agent_name: str):
+    """Return the RAG profile for a specific agent."""
+    profile = get_agent_profile(agent_name)
+    if not profile:
+        raise HTTPException(404, f"No RAG profile for agent: {agent_name}")
+    return profile
+
+
+@router.post("/drift-detect")
+async def drift_detect_endpoint(request: AgenticRAGRequest):
+    """Run vector drift detection for an agent's query embedding."""
+    try:
+        rag = get_agent_rag(request.agent)
+        result = await rag.detect_vector_drift(request.query)
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"Drift detection failed: {e}")

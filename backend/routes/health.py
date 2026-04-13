@@ -30,5 +30,29 @@ async def ready():
     except:
         checks["redis"] = "error"
 
+    # MCP tools health
+    try:
+        from backend.mcp.registry import list_tools
+        tool_count = len(list_tools())
+        checks["mcp_tools"] = "ok" if tool_count > 0 else "error"
+    except:
+        checks["mcp_tools"] = "error"
+
+    # MCP server scopes health
+    try:
+        from backend.mcp.mcp_servers import get_tool_manifest
+        manifest = get_tool_manifest()
+        checks["mcp_servers"] = "ok" if manifest["total_servers"] > 0 else "error"
+    except:
+        checks["mcp_servers"] = "error"
+
+    # RAG health
+    try:
+        from backend.rag.embedder import get_embeddings
+        get_embeddings()
+        checks["rag_embedder"] = "ok"
+    except:
+        checks["rag_embedder"] = "error"
+
     all_ok = all(v == "ok" for v in checks.values())
     return {"status": "ok" if all_ok else "degraded", "checks": checks}

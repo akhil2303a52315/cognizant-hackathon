@@ -60,6 +60,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ MCP tools registration failed: {e}")
 
+    try:
+        from backend.mcp.mcp_toolkit import init_all_mcp_clients
+        init_all_mcp_clients()
+        logger.info("✅ MCP clients initialized for all agents")
+    except Exception as e:
+        logger.warning(f"⚠️ MCP client initialization failed: {e}")
+
     yield
     logger.info("🛑 Shutting down...")
 

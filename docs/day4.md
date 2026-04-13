@@ -397,3 +397,163 @@ The `mock: true/false` flag lets the frontend display warnings when fallback dat
 - [x] `rag_query` MCP tool for all agents
 - [x] Mock fallback strategy for every tool
 - [x] MCP API key authentication (separate from main API key)
+
+---
+
+## Day 4 Upgrade — MCP Toolkit + Secure Execution + Agent Integration
+
+> **Date:** Day 4 Upgrade (Apr 13)
+> **Focus:** MultiServerMCPClient, least-privilege scopes, secure execution, RAG→MCP auto-escalation
+> **Status:** ✅ Complete
+
+### New Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    MCP TOOLKIT (Day 4 Upgrade)                      │
+│                                                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │ mcp_servers   │  │ mcp_toolkit  │  │  secure_mcp  │              │
+│  │ (6 servers)   │  │ (MCPClient)  │  │ (9-step      │              │
+│  │ (agent scopes)│  │ (discovery)  │  │  pipeline)   │              │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
+│         │                  │                  │                       │
+│         └──────────────────┴──────────────────┘                     │
+│                            │                                         │
+│              ┌─────────────▼──────────────┐                        │
+│              │  agent_mcp_integration      │                        │
+│              │  (auto-attach + escalation) │                        │
+│              └─────────────┬──────────────┘                        │
+│                            │                                         │
+│         ┌──────────────────┼──────────────────┐                    │
+│         ↓                  ↓                  ↓                     │
+│    Risk Agent        Supply Agent       Logistics Agent             │
+│    (news+web+rag)    (erp+shipping+rag) (shipping+rag)             │
+│         ↓                  ↓                  ↓                     │
+│    Market Agent       Finance Agent      Brand Agent                │
+│    (finance+web+rag)  (finance+erp+rag) (web+news+rag)             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### New Files
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `backend/mcp/mcp_servers.py` | ~170 | 6 logical MCP server definitions with `AGENT_SERVER_MAP` for least-privilege scoping |
+| `backend/mcp/mcp_toolkit.py` | ~240 | `MultiServerMCPClient` — scoped per-agent client, tool discovery, LangChain Tool conversion, schema evolution with Redis cached fallback, tool health tracking |
+| `backend/mcp/secure_mcp.py` | ~260 | `SecureMCPExecutor` — 9-step pipeline: scope → rate limit → sanitize → sandbox → schema → cache → execute → output sanitize → audit |
+| `backend/mcp/agent_mcp_integration.py` | ~190 | Auto-attach MCP tools to agents, `auto_escalate_to_mcp()` bridging Day 3 RAG to Day 4 MCP, message injection helpers |
+
+### Updated Files
+
+| File | Changes |
+|------|---------|
+| `backend/mcp/__init__.py` | Full exports from all 4 new modules |
+| `backend/mcp/registry.py` | Added `allowed_agents` field to `ToolDefinition`, auto-populates from `AGENT_SERVER_MAP` |
+| `backend/mcp/server.py` | 7 new endpoints: `/manifest`, `/servers`, `/agent/{name}/tools`, `/secure-invoke`, `/tool-health`, `/rate-limit/{name}`, `/agent/{name}/health-check` |
+| `backend/graph.py` | Added `mcp_escalation` node: `moderator → rag_prefetch → mcp_escalation → [6 agents]` |
+| `backend/agents/*.py` (all 6) | MCP system prompt injection + auto-escalation when RAG confidence < threshold |
+| `backend/routes/health.py` | Added `mcp_tools`, `mcp_servers`, `rag_embedder` health checks |
+| `backend/main.py` | Added `init_all_mcp_clients()` to lifespan startup |
+
+---
+
+### MCP Server Groupings (Least-Privilege)
+
+| Server | Tools | Allowed Agents |
+|--------|-------|---------------|
+| **news_geopolitical** | news_search, newsapi_top_headlines, gdelt_search_events, gdelt_search_gkg, gdacs_disaster_alerts, wikipedia_search, arxiv_search | risk, brand, moderator |
+| **shipping_logistics** | route_optimize, port_status, freight_rate, get_shipping_routes, weather_current, weather_forecast, usgs_earthquakes | logistics, supply, moderator |
+| **erp_inventory** | erp_query, neo4j_query, supplier_search, contract_lookup, supplier_risk_score, search_suppliers | supply, finance, moderator |
+| **finance_market** | finnhub_stock_quote, finnhub_stock_candles, frankfurter_latest_rates, frankfurter_historical_rates, fred_commodity_price, currency_rate, insurance_claim, comtrade_trade_data, worldbank_indicators | finance, market, moderator |
+| **web_intel** | firecrawl_scrape, firecrawl_crawl, firecrawl_search, reddit_search, social_sentiment, competitor_intel | brand, risk, market, moderator |
+| **rag** | rag_query, agentic_rag_query, graph_rag_v2 | ALL agents |
+
+### Secure MCP Execution Pipeline (9 Steps)
+
+```
+1. Scope Validation    → Is tool allowed for this agent?
+2. Rate Limiting       → Per-agent, per-server (10-60/min)
+3. Input Sanitization  → SQL injection, XSS, dangerous patterns
+4. PII Redaction       → Email, phone, SSN, credit card
+5. Sandbox Validation  → Prompt injection, write operations
+6. Schema Validation   → Required params + cached fallback for evolution
+7. Cache Check         → Redis: mcp:{tool}:{sha256(params)}
+8. Tool Execution      → Async with 30s timeout
+9. Output Sanitization → PII redaction + truncation + audit log
+```
+
+### RAG → MCP Auto-Escalation Flow
+
+```
+Agent receives query
+    ↓
+RAG Pre-fetch (Day 3)
+    ↓
+MCP Escalation Node checks RAG confidence
+    ↓
+If confidence < threshold (e.g., 70%):
+    → Auto-call domain-specific MCP tools
+    → Risk Agent → GDELT + NewsAPI
+    → Supply Agent → supplier_search + route_optimize
+    → Logistics Agent → weather + port_status
+    → Market Agent → Finnhub + Frankfurter
+    → Finance Agent → currency_rate + ERP
+    → Brand Agent → Reddit + Firecrawl
+    ↓
+MCP results injected into agent messages
+    ↓
+Agent LLM call with RAG context + MCP data
+```
+
+### New MCP Server Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/mcp/manifest` | GET | Complete tool discovery manifest with servers + agent scopes |
+| `/mcp/servers` | GET | All MCP server definitions |
+| `/mcp/agent/{name}/tools` | GET | Tools allowed for a specific agent |
+| `/mcp/secure-invoke` | POST | Secure MCP invocation (sandboxed, rate-limited, audited) |
+| `/mcp/tool-health` | GET | Health stats for all tracked tools |
+| `/mcp/rate-limit/{agent}` | GET | Current rate limit status for an agent |
+| `/mcp/agent/{name}/health-check` | POST | Run health checks for agent's MCP servers |
+
+### Schema Evolution Handling
+
+When a tool's input schema changes or becomes unavailable:
+1. Current schema is cached in Redis (`mcp_schema:{tool_name}`, TTL 24h)
+2. If current schema unavailable → fall back to cached version
+3. `schema_version` field in response: `"current"` or `"cached_fallback"`
+4. Warning added to response metadata
+
+### Rate Limiting
+
+| Agent | Default Limit | Window |
+|-------|--------------|--------|
+| risk | 20/min | 60s |
+| supply | 15/min | 60s |
+| logistics | 30/min | 60s |
+| market | 30/min | 60s |
+| finance | 30/min | 60s |
+| brand | 10/min | 60s |
+| moderator | 30/min | 60s |
+
+---
+
+### Day 4 Upgrade Deliverables ✅
+
+- [x] 6 logical MCP server definitions with tool groupings
+- [x] Least-privilege agent scopes (AGENT_SERVER_MAP)
+- [x] MultiServerMCPClient with scoped tool discovery
+- [x] LangChain Tool conversion for ReAct integration
+- [x] 9-step SecureMCPExecutor pipeline
+- [x] Input sanitization + PII redaction + prompt injection guardrails
+- [x] Schema evolution handling with Redis cached fallback
+- [x] Per-agent rate limiting
+- [x] Tool health tracking (success rate, avg latency)
+- [x] RAG → MCP auto-escalation when confidence < threshold
+- [x] MCP escalation node in LangGraph workflow
+- [x] All 6 agents + moderator integrated with MCP tools
+- [x] 7 new MCP server API endpoints
+- [x] MCP health checks in /ready endpoint
+- [x] MCP client initialization on app startup

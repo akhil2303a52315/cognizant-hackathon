@@ -282,3 +282,113 @@ curl -X POST http://localhost:8000/rag/hybrid \
 - [x] FastAPI router with 8 endpoints
 - [x] `rag_query` MCP tool registered for all agents
 - [x] Configurable chunk size, overlap, top_k, cache TTL
+
+---
+
+## Day 3 Upgrade — Agentic Corrective RAG + HybridCypherRetriever
+
+> **Date:** Day 3 Upgrade (Apr 13)
+> **Focus:** Corrective RAG with critique + self-reflection, HybridCypherRetriever with Tier-1/2/3 traversal, agent-specific RAG profiles
+> **Status:** ✅ Complete
+
+### New Architecture
+
+```
+User Query → Moderator → RAG Pre-fetch → MCP Escalation → Agent Fan-out
+                 │              │                │
+                 │         AgenticRAG      Auto-escalate
+                 │         (critique +     if confidence
+                 │          self-reflect)   < 70% → MCP
+                 │              │           tools
+                 │         rag_contexts
+                 │         in state
+                 ↓              ↓
+         Each Agent: RAG context + MCP results injected into LLM messages
+                 │
+                 ↓
+         Agent Fan-out → Debate → Synthesize → Recommendation
+```
+
+### New Files
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `backend/rag/rag_config.py` | ~110 | Centralized config: embedding providers, vector store, Neo4j, per-agent RAG profiles (collection, top_k, recency_days, confidence_threshold, MCP escalation tools) |
+| `backend/rag/base_rag.py` | ~150 | `BaseRAG` class: `load_and_index_file()`, `load_and_index_url()`, `retrieve()` (hybrid vector+BM25+RRF), `_apply_recency_weighting()`, `build_prompt_context()`, `health_check()` |
+| `backend/rag/agentic_rag.py` | ~230 | `AgenticRAG(BaseRAG)`: Full Corrective RAG pipeline — `retrieve()` → `critique_step()` (LLM grades 1-10) → `self_reflection()` (if confidence < 70%, re-retrieve or escalate to MCP) → `run()` (full loop with max 2 retries) → `detect_vector_drift()` stub |
+| `backend/rag/agent_rag_integration.py` | ~170 | Domain-specific retrievers per agent, `get_rag_context()`, `inject_rag_into_messages()`, `prefetch_rag_for_all_agents()` |
+
+### Upgraded Files
+
+| File | Changes |
+|------|---------|
+| `backend/rag/graph_rag.py` | Replaced basic 55-line module with full `HybridCypherRetriever` (~350 lines). 6 Cypher templates: Tier-1/2/3 supplier traversal, component dependencies, risk propagation. LLM entity extraction. `format_graph_context()`. Backwards-compatible `graph_rag_query()`. |
+| `backend/rag/__init__.py` | Full exports: all new classes, functions, config values |
+| `backend/rag/api.py` | 6 new endpoints: `/agentic-query`, `/agent-context`, `/graph-query-v2`, `/config`, `/agent-profile/{name}`, `/drift-detect` |
+| `backend/graph.py` | Added `rag_prefetch` node between moderator and agent fan-out |
+| `backend/agents/*.py` (all 6 + moderator) | RAG context injection before LLM call |
+
+### Agent RAG Profiles
+
+| Agent | Collection | Top K | Recency Days | Confidence Threshold | MCP Escalation Tools |
+|-------|-----------|-------|-------------|---------------------|---------------------|
+| risk | risk_docs | 6 | 7 | 0.70 | gdelt_search_events, news_search |
+| supply | supply_docs | 8 | 30 | 0.65 | supplier_search, route_optimize |
+| logistics | logistics_docs | 6 | 3 | 0.70 | weather_current, port_status |
+| market | market_docs | 8 | 14 | 0.65 | finnhub_stock_quote, frankfurter_latest_rates |
+| finance | finance_docs | 6 | 30 | 0.70 | currency_rate, erp_query |
+| brand | brand_docs | 6 | 3 | 0.75 | reddit_search, social_sentiment |
+| moderator | council_docs | 10 | 7 | 0.60 | (all tools) |
+
+### Self-Reflection Loop
+
+```
+1. retrieve() → hybrid vector + BM25 + RRF
+2. critique_step() → LLM grades each doc 1-10
+3. self_reflection() → if avg < 7.0:
+   → Expand query with synonyms
+   → Re-retrieve (max 2 loops)
+   → If still < 7.0 → escalate to MCP tools
+4. run() → returns context, sources, confidence, loops_used, escalated
+```
+
+### HybridCypherRetriever Cypher Queries
+
+| Query | Purpose |
+|-------|---------|
+| `CYPHER_TIER1_SUPPLIERS` | Direct supplier lookup with component details |
+| `CYPHER_TIER2_SUPPLIERS` | Sub-tier dependencies (Tier-1 → Tier-2) |
+| `CYPHER_TIER3_SUPPLIERS` | Deep sub-tier (Tier-1 → Tier-2 → Tier-3) |
+| `CYPHER_COMPONENT_DEPENDENCY` | Component → used_in relationships |
+| `CYPHER_SUPPLIER_RISK_PROPAGATION` | Risk paths across dependency chains (1-3 hops) |
+| `CYPHER_ALL_SUPPLIERS` | Fallback when no entity matches |
+
+### New RAG API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/rag/agentic-query` | POST | Full Agentic RAG pipeline for a specific agent |
+| `/rag/agent-context` | POST | Combined Agentic + Graph RAG context for an agent |
+| `/rag/graph-query-v2` | POST | HybridCypherRetriever with Tier-1/2/3 traversal |
+| `/rag/config` | GET | Current RAG configuration and agent profiles |
+| `/rag/agent-profile/{name}` | GET | RAG profile for a specific agent |
+| `/rag/drift-detect` | POST | Vector drift detection for an agent's query |
+
+---
+
+### Day 3 Upgrade Deliverables ✅
+
+- [x] Centralized RAG config with per-agent profiles
+- [x] BaseRAG class with hybrid retrieval + recency weighting
+- [x] AgenticRAG with LLM critique + self-reflection loop
+- [x] MCP escalation fallback when RAG confidence < threshold
+- [x] HybridCypherRetriever with 6 Cypher templates
+- [x] Tier-1/2/3 supplier traversal
+- [x] Component dependency + risk propagation queries
+- [x] LLM entity extraction for graph queries
+- [x] Domain-specific retrievers for all 7 agents
+- [x] RAG pre-fetch node in LangGraph workflow
+- [x] RAG context injection in all 6 agents + moderator
+- [x] Vector drift detection stub
+- [x] 6 new RAG API endpoints
+- [x] 2 new MCP tools (agentic_rag_query, graph_rag_v2)
