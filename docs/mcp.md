@@ -1467,25 +1467,66 @@ async def call_tool_with_fallback(agent: str, tool: str, params: dict) -> dict:
 
 ---
 
-## 11. Complete Tool Summary
+## 11. Complete Tool Summary (45 Tools)
 
-| # | Tool Name | Agent | External API | Cache TTL | Sandbox | Write |
-|---|-----------|-------|-------------|-----------|---------|-------|
-| 1 | `news_search` | risk | NewsAPI | 5m | No | No |
-| 2 | `gdelt_query` | risk | GDELT (free) | 10m | No | No |
-| 3 | `supplier_financials` | risk | Mock/ERP | 15m | No | No |
-| 4 | `neo4j_query` | supply | Neo4j | 5m | Yes | No |
-| 5 | `supplier_search` | supply | Neo4j | 10m | Yes | No |
-| 6 | `contract_lookup` | supply | Mock/DB | 30m | No | No |
-| 7 | `route_optimize` | logistics | OR-Tools | 5m | No | No |
-| 8 | `port_status` | logistics | Marine Traffic | 3m | No | No |
-| 9 | `freight_rate` | logistics | Freightos | 10m | No | No |
-| 10 | `commodity_price` | market | Commodity API | 10m | No | No |
-| 11 | `trade_data` | market | UN Comtrade | 1h | No | No |
-| 12 | `tariff_lookup` | market | Trade DB | 1h | No | No |
-| 13 | `erp_query` | finance | SAP/Oracle | 5m | Yes | No |
-| 14 | `currency_rate` | finance | Exchange API | 30m | No | No |
-| 15 | `insurance_claim` | finance | Insurance DB | 0 | No | Yes |
-| 16 | `social_sentiment` | brand | Twitter/Reddit | 3m | No | No |
-| 17 | `competitor_ads` | brand | Semrush/SpyFu | 10m | No | No |
-| 18 | `content_generate` | brand | LLM | 0 | No | No |
+### Original Tools (1-22)
+
+| # | Tool Name | Agent | External API | Live? |
+|---|-----------|-------|-------------|-------|
+| 1 | `news_search` | risk | NewsAPI | ✅ |
+| 2 | `gdelt_query` | risk | GDELT | ✅ |
+| 3 | `supplier_financials` | risk | Finnhub | ✅ |
+| 4 | `neo4j_query` | supply | Neo4j | ✅ |
+| 5 | `supplier_search` | supply | Neo4j | ✅ |
+| 6 | `contract_lookup` | supply | Mock/DB | Mock |
+| 7 | `route_optimize` | logistics | OR-Tools | ✅ |
+| 8 | `port_status` | logistics | Mock | Mock |
+| 9 | `freight_rate` | logistics | Mock | Mock |
+| 10 | `commodity_price` | market | FRED/Yahoo | ✅ |
+| 11 | `trade_data` | market | UN Comtrade | ✅ |
+| 12 | `tariff_lookup` | market | Trade DB | Mock |
+| 13 | `erp_query` | finance | SAP/Oracle | Mock |
+| 14 | `currency_rate` | finance | Frankfurter | ✅ |
+| 15 | `insurance_claim` | finance | Insurance DB | Mock |
+| 16 | `social_sentiment` | brand | Reddit | ✅ |
+| 17 | `competitor_ads` | brand | Mock | Mock |
+| 18 | `content_generate` | brand | LLM | ✅ |
+| 19 | `rag_query` | all | Pinecone/HF | ✅ |
+| 20 | `firecrawl_scrape` | all | Firecrawl | ✅ |
+| 21 | `web_search` | all | Firecrawl | ✅ |
+| 22 | `pdf_export` | all | ReportLab | ✅ |
+
+### New Real-Data Tools (23-45)
+
+| # | Tool Name | Agent | External API | Live? | File |
+|---|-----------|-------|-------------|-------|------|
+| 23 | `gdelt_events` | risk | GDELT | ✅ | `gdelt_tools.py` |
+| 24 | `gdelt_tone` | risk | GDELT | ✅ | `gdelt_tools.py` |
+| 25 | `stock_quote` | risk/finance | Finnhub | ✅ | `finnhub_tools.py` |
+| 26 | `company_profile` | risk/finance | Finnhub | ✅ | `finnhub_tools.py` |
+| 27 | `company_financials` | risk/finance | Finnhub | ✅ | `finnhub_tools.py` |
+| 28 | `fred_commodity_price` | market | FRED + Yahoo Finance | ✅ | `fred_tools.py` |
+| 29 | `economic_indicator` | market | FRED | ✅ | `fred_tools.py` |
+| 30 | `exchange_rate` | finance | Frankfurter | ✅ | `frankfurter_tools.py` |
+| 31 | `historical_rate` | finance | Frankfurter | ✅ | `frankfurter_tools.py` |
+| 32 | `weather_forecast` | risk/logistics | Open-Meteo | ✅ | `weather_tools.py` |
+| 33 | `earthquake_check` | risk | USGS | ✅ | `weather_tools.py` |
+| 34 | `disaster_alerts` | risk | GDACS | ✅ | `weather_tools.py` |
+| 35 | `wikipedia_search` | all | MediaWiki API | ✅ | `knowledge_tools.py` |
+| 36 | `wikipedia_summary` | all | MediaWiki API | ✅ | `knowledge_tools.py` |
+| 37 | `arxiv_search` | all | Arxiv | ✅ | `knowledge_tools.py` |
+| 38 | `reddit_sentiment` | brand | Reddit | ✅ | `knowledge_tools.py` |
+| 39 | `trade_flows` | market | UN Comtrade | ✅ | `trade_tools.py` |
+| 40 | `sec_filing` | finance | SEC EDGAR | ✅ | `trade_tools.py` |
+| 41 | `opencorporates_search` | supply | OpenCorporates | ✅ | `trade_tools.py` |
+| 42 | `worldbank_indicator` | market | World Bank | ✅ | `trade_tools.py` |
+| 43-45 | (reserved for future) | — | — | — | — |
+
+### Market API (Frontend Aggregation)
+
+| Endpoint | Tools Used |
+|----------|-----------|
+| `GET /market/ticker` | `stock_quote` ×4, `exchange_rate`, `fred_commodity_price` ×2 |
+| `GET /market/company/{symbol}` | `company_profile`, `stock_quote`, `company_financials`, `wikipedia_summary` |
+| `GET /market/risk-dashboard` | `earthquake_check` ×3, `weather_forecast` ×3, `disaster_alerts` |
+| `GET /market/brand-intel` | `reddit_sentiment` ×2, `wikipedia_search`, `arxiv_search` |

@@ -1,6 +1,6 @@
 # SupplyChainGPT — Product Roadmap
 
-## Current Status (End of Day 5)
+## Current Status (End of Day 6)
 
 | Phase | Name | Status | Completion |
 |-------|------|--------|------------|
@@ -11,43 +11,54 @@
 | 4 | Debate Engine + Predictions | ✅ Complete | 100% |
 | 5 | Backend API + Optimization | ✅ Complete | 100% |
 | 6 | Frontend Foundation | ✅ Complete | 100% |
-| 7 | Frontend Polish & Integration | 🔲 Upcoming | 0% |
-| 8 | Security & Production Hardening | 🔲 Upcoming | 0% |
+| 6b | Real Data Integration | ✅ Complete | 100% |
+| 7 | Frontend Polish & Integration | � In Progress | 60% |
+| 8 | Security & Production Hardening | 🔲 Upcoming | 10% |
 | 9 | Testing, Deployment & Demo | 🔲 Upcoming | 0% |
 
-**Overall: ~60% complete**
+**Overall: ~70% complete**
 
 ---
 
-## Day 6 (Apr 17) — Backend API + Observability
+## Day 6 (Apr 17) — Real Data + Market API ✅
 
-### Morning: Production API Polish
-- [ ] Add request/response validation schemas (Pydantic v2) for all endpoints
-- [ ] Implement pagination on list endpoints (`/rag/collections`, `/risk/suppliers`)
-- [ ] Add API versioning prefix (`/v1/...`)
-- [ ] Swagger/OpenAPI docs polish with examples
+### Completed
+- [x] 12 custom MCP tools integrated (45 total, was 22)
+- [x] All 12 APIs verified LIVE: Finnhub, Frankfurter, Yahoo Finance, Open-Meteo, USGS, Wikipedia, Reddit, World Bank, GDACS, GDELT, SEC EDGAR, OpenCorporates
+- [x] Market API: 4 endpoints (`/market/ticker`, `/market/company/{symbol}`, `/market/risk-dashboard`, `/market/brand-intel`)
+- [x] Dashboard: Live stock tickers, forex rates, commodity prices, earthquake alerts, disaster warnings
+- [x] Brand Intel: Live Reddit feeds, Wikipedia articles, company profiles
+- [x] Settings: Live API status indicators
+- [x] Yahoo Finance fallback for commodity prices
+- [x] Streaming debate engine (SSE) — 4029 events verified
+- [x] Groq as primary LLM with OpenRouter + NVIDIA fallbacks
+- [x] API key security: Removed exposed keys, added `extra = "ignore"`
+- [x] Axios timeout increased to 120s
 
-### Afternoon: Observability & Monitoring
-- [ ] LangSmith tracing integration for all agent runs
-- [ ] Prometheus metrics endpoint (`/metrics`) — latency, token usage, error rate
-- [ ] Grafana dashboard JSON stub
-- [ ] Structured logging with correlation IDs
-- [ ] Health check aggregation (DB + Redis + Neo4j + LLM status)
+### Key Fixes
+- Wikipedia: MediaWiki API instead of REST API (403 bot policy)
+- Reddit: `old.reddit.com` for reliable JSON without auth
+- Frankfurter/Arxiv: `follow_redirects=True`
+- GDELT: 429 rate limit handling
+- FRED: Yahoo Finance fallback when key invalid
 
 ---
 
-## Day 7 (Apr 18) — Frontend Dashboard (4-Page SPA)
+## Day 7 (Apr 18) — Frontend Dashboard Polish
 
 ### Morning: Dashboard + Chat Pages
-- [ ] Dashboard page: Risk heatmap (recharts), supplier stats cards, alert feed
-- [ ] Chat page: Council query input, streaming response display, agent cards with confidence bars
-- [ ] Connect to backend via TanStack Query mutations
-- [ ] SSE streaming integration for council responses
+- [x] Dashboard page: Live stock tickers, forex, commodities, earthquake alerts, disaster warnings
+- [x] Chat page: Council query input, streaming response display, agent cards with confidence bars
+- [x] SSE streaming integration for council responses
+- [ ] Risk heatmap with recharts visualization
+- [ ] Historical trend charts
 
 ### Afternoon: Debate + Brand Pages
-- [ ] Debate page: Multi-round timeline, agent argument cards, prediction charts
-- [ ] Brand page: Social sentiment dashboard, competitor intelligence, crisis response templates
-- [ ] Settings page: API key management, RAG config, theme toggle
+- [x] Debate page: SSE streaming with stop button, PDF export
+- [x] Brand page: Live Reddit feeds, Wikipedia knowledge, company profiles, competitor search
+- [x] Settings page: Live API status indicators, API key management, RAG config
+- [ ] Prediction charts on debate page
+- [ ] Campaign/ambassador tracking UI
 - [ ] Real-time WebSocket updates (agent status, risk alerts)
 
 ---

@@ -575,7 +575,7 @@ Use this scenario in presentations and end-to-end demo:
 | 3 | Apr 14 | Agentic RAG Integration | Akhil | Agentic RAG + Graph RAG on Neo4j integrated into all 7 agents |
 | 4 | Apr 15 | MCP Tool Integration | Akhil | MCP servers + secure tool calling in every agent |
 | 5 | Apr 16 | Debate Engine + Predictions + Brand Agent + Frontend Foundation | Rohith + Akhil | ✅ Complete Debate Engine, Predictions, Brand Agent, Fallbacks, WebSocket, PDF Export, Firecrawl MCP, Frontend scaffold (Phase 6: 100%) |
-| 6 | Apr 17 | Backend API + Observability | Rohith + Akhil | Production-ready FastAPI endpoints, LangSmith + Prometheus observability, human-in-loop, full integration tests |
+| 6 | Apr 17 | Backend API + Observability + Real Data | Rohith + Akhil | ✅ 45 MCP tools (12 live APIs), Market API (4 endpoints), Streaming debate, Yahoo Finance fallback, API key security fix |
 | 7 | Apr 18 | React Frontend Dashboard (4-Page SPA) | Aishwarya + Poojitha | Complete 4-page React SPA + all Radix modals + WebSocket integration |
 | 8 | Apr 19 | Production Polish & Security | ALL 4 Members | Security hardening, cost optimization, UI polish, full integration, performance tuning, export features |
 | 9 | Apr 20 | Testing, Deployment & Final Prep | ALL 4 Members | Fully Dockerized, AWS-deployed, tested MVP + polished PDF + demo video + README |
@@ -806,6 +806,9 @@ Aishwarya & Poojitha hand off to All 4 (Day 8 & 9) → final polish, security, d
 ### Backend
 - **Unit tests**: pytest + pytest-asyncio
 - **API tests**: httpx against live server — **26/28 passed** (2 LLM-dependent skipped)
+- **Live API tests**: All 12 real-data MCP tools verified LIVE (Finnhub, Frankfurter, Yahoo Finance, Open-Meteo, USGS, Wikipedia, Reddit, World Bank, GDACS, GDELT, SEC EDGAR, OpenCorporates)
+- **Market API**: 4 endpoints tested — `/market/ticker`, `/market/company/{symbol}`, `/market/risk-dashboard`, `/market/brand-intel`
+- **Streaming**: SSE debate engine verified — 4029 events streamed via Groq LLM
 - **WebSocket tests**: `tests/test_websocket.py` — connect, subscribe, heartbeat
 - **Static typing**: mypy (optional)
 - **Linting**: ruff (or flake8)
@@ -817,13 +820,13 @@ Aishwarya & Poojitha hand off to All 4 (Day 8 & 9) → final polish, security, d
 
 ### Frontend
 - **TypeScript**: Zero errors (`npx tsc --noEmit`)
-- **Build**: Production build passes — 311KB JS, 17KB CSS
+- **Build**: Production build passes — 337KB JS, 18KB CSS, zero TS errors
 - **Unit tests**: vitest / jest (to be added Day 7+)
 - **Lint**: eslint
 
 ```bash
-cd apps/web
-npm test
+cd frontend
+npm run build
 ```
 
 ### E2E
@@ -837,6 +840,8 @@ npm test
 - **Data minimization**: Ingest only fields needed for scoring and planning
 - **Access control**: Role-based access (Procurement vs Finance vs Comms)
 - **PII handling**: Avoid storing unnecessary personal data; mask where required
+- **API key security**: All keys removed from `.env.example` (placeholders only), `google_api_key` and `gemini_api_key` removed from config, `extra = "ignore"` prevents crashes
+- **Auth middleware**: `/market/*` endpoints are public, all other routes require API key
 - **RAG grounding**: Answers should cite internal doc IDs; avoid free-form guessing
 - **Auditability**: Store agent outputs and evidence references for review
 - **Human-in-the-loop**: Suggestions should be reviewed before execution (especially supplier switches, customer communications, and financial actions)

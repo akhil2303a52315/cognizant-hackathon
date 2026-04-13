@@ -377,9 +377,14 @@ Complete feature breakdown for the Council of Debate AI Agents system, derived f
 | Brand Crisis Auto-Response | Brand | BERT + GPT-4 + Social APIs | Reputation protection |
 | Tiered Fallback Options | All | Constraint optimization | Never without a plan |
 | RAG-powered Q&A | All | LangChain + Pinecone | Grounded, cited answers |
-| MCP Tool Integration | All | MCP protocol | Real system actions |
+| MCP Tool Integration | All | MCP protocol (45 tools) | Real system actions |
 | Parallel Agent Execution | Moderator | LangGraph Send/parallel | Speed (all agents run at once) |
 | Persistent State | All | PostgreSQL + Redis | Audit trail + restart recovery |
-| Live Debate Streaming | All | WebSocket + Socket.io | Real-time visibility |
+| SSE Streaming Debate | All | Groq + SSE (4029 events verified) | Real-time token-by-token output |
+| Live Market Data Dashboard | All | Finnhub + Frankfurter + Yahoo Finance | Real-time stocks, forex, commodities |
+| Risk Dashboard (Earthquakes/Weather) | Risk | USGS + Open-Meteo + GDACS | Live disaster monitoring |
+| Brand Intelligence | Brand | Reddit + Wikipedia + Arxiv | Live social sentiment + knowledge |
+| Market API (4 endpoints) | All | FastAPI aggregation | Frontend-ready market data |
 | Cost Optimization | All | Redis cache + LLM fallback | 60%+ cost reduction |
 | Security Hardening | All | LlamaGuard + rate limit + PII redaction | Production-safe system |
+| Live API Status Monitor | Settings | Health check via market ticker | Real-time API health visibility |

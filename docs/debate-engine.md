@@ -1048,7 +1048,8 @@ class DebateConfig(BaseModel):
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/council/analyze` | POST | Start full council debate |
+| `/council/analyze` | POST | Start full council debate (blocking, returns full result) |
+| `/council/stream` | POST | **SSE streaming** — token-by-token output from each agent (primary for frontend) |
 | `/council/agent/{agent}` | POST | Run single agent (no debate) |
 | `/council/{id}/status` | GET | Check round + agent status |
 | `/council/{id}/result` | GET | Get final recommendation |
@@ -1056,6 +1057,22 @@ class DebateConfig(BaseModel):
 | `/council/{id}/export/pdf` | GET | Export debate as PDF |
 | `/council/{id}/export/json` | GET | Export debate as JSON |
 | `ws://*/ws/council` | WS | Real-time debate streaming |
+
+### SSE Stream Events (`/council/stream`)
+
+```json
+{"type": "start", "session_id": "uuid"}
+{"type": "agent_start", "agent": "risk"}
+{"type": "token", "agent": "risk", "content": "Risk Analysis..."}
+{"type": "agent_done", "agent": "risk"}
+{"type": "agent_start", "agent": "moderator"}
+{"type": "token", "agent": "moderator", "content": "Recommendation..."}
+{"type": "agent_done", "agent": "moderator"}
+{"type": "complete", "session_id": "uuid", "recommendation": "..."}
+```
+
+**LLM Provider:** Groq (primary, ~2s/agent), OpenRouter + NVIDIA (fallbacks)
+**Verified:** 4029 events streamed successfully
 
 ---
 

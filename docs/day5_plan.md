@@ -287,4 +287,18 @@ npx shadcn@latest init
 - **WebSocket** tested — SSE streaming works, WS is additive. ✅ Native WS client (not socket.io).
 - **Frontend** scaffold is solid — Day 6+ depends on it. ✅ Zero TS errors, production build passes.
 - **Virtual environment** — Backend uses `project/venv/` with Python 3.12. Activate with `venv\Scripts\Activate.ps1` or use `& "path/to/venv/Scripts/python.exe"`.
-- **Ports** — Backend: 8000, Frontend: 3001 (3000 may be in use).
+- **Ports** — Backend: 8000, Frontend: 3000.
+
+---
+
+## Day 6 Update — Real Data Integration ✅
+
+All Day 5 + Day 6 work complete:
+
+- **45 MCP tools** registered (was 22)
+- **12 live APIs** verified: Finnhub, Frankfurter, Yahoo Finance, Open-Meteo, USGS, Wikipedia, Reddit, World Bank, GDACS, GDELT, SEC EDGAR, OpenCorporates
+- **Market API** (4 endpoints): `/market/ticker`, `/market/company/{symbol}`, `/market/risk-dashboard`, `/market/brand-intel`
+- **Streaming debate** via SSE — 4029 events verified with Groq LLM
+- **Groq** as primary LLM, OpenRouter + NVIDIA as fallbacks
+- **API key security** fixed: Removed exposed Gemini key, all .env.example values cleared
+- **Overall project: ~70% complete**

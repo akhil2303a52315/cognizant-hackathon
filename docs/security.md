@@ -72,12 +72,13 @@ API_KEYS = os.getenv("API_KEYS", "dev-key").split(",")
 MCP_API_KEYS = os.getenv("MCP_API_KEY", "dev-mcp-key").split(",")
 
 # Endpoints that skip authentication
-PUBLIC_ENDPOINTS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc"}
+PUBLIC_ENDPOINTS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc", "/test", "/market/ticker", "/market/risk-dashboard", "/market/brand-intel"}
+PUBLIC_PREFIXES = ("/market/company/",)  # Dynamic paths
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip auth for public endpoints
-        if request.url.path in PUBLIC_ENDPOINTS:
+        if request.url.path in PUBLIC_ENDPOINTS or any(request.url.path.startswith(p) for p in PUBLIC_PREFIXES):
             return await call_next(request)
 
         # Skip OPTIONS (CORS preflight)
@@ -108,7 +109,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 | Groq | `GROQ_API_KEY` | — | LLM calls | Quarterly |
 | OpenRouter | `OPENROUTER_API_KEY` | — | LLM calls | Quarterly |
 | NVIDIA | `NVIDIA_API_KEY` | — | LLM calls | Quarterly |
-| Google | `GOOGLE_API_KEY` | — | LLM calls | Quarterly |
+| ~~Google~~ | ~~`GOOGLE_API_KEY`~~ | ~~Removed~~ | ~~Removed from config~~ | N/A |
 | Cohere | `COHERE_API_KEY` | — | Rerank + LLM | Quarterly |
 | HuggingFace | `HUGGINGFACE_API_KEY` | — | Embeddings | Quarterly |
 | Pinecone | `PINECONE_API_KEY` | — | Vector store | Quarterly |
