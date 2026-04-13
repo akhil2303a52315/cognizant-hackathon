@@ -16,12 +16,12 @@ const AGENT_COLORS: Record<string, string> = {
 }
 
 const AGENT_LABELS: Record<string, string> = {
-  risk: 'Risk Analyst',
-  supply: 'Supply Analyst',
-  logistics: 'Logistics Expert',
-  market: 'Market Strategist',
-  finance: 'Finance Advisor',
-  brand: 'Brand Guardian',
+  risk: 'Risk Sentinel',
+  supply: 'Supply Optimizer',
+  logistics: 'Logistics Navigator',
+  market: 'Market Intelligence',
+  finance: 'Finance Guardian',
+  brand: 'Brand Protector',
   moderator: 'Council Moderator',
 }
 

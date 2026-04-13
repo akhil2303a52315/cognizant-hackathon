@@ -16,6 +16,16 @@ const AGENT_COLORS: Record<string, string> = {
   moderator: 'text-council-purple',
 }
 
+const AGENT_NAMES: Record<string, string> = {
+  risk: 'Risk Sentinel',
+  supply: 'Supply Optimizer',
+  logistics: 'Logistics Navigator',
+  market: 'Market Intelligence',
+  finance: 'Finance Guardian',
+  brand: 'Brand Protector',
+  moderator: 'Moderator',
+}
+
 export default function Chat() {
   const [query, setQuery] = useState('')
   const { startStream, stopStream, isStreaming, agentOutputs, currentSession } = useCouncilStream()
@@ -54,7 +64,7 @@ export default function Chat() {
           <div key={agent} className="bg-gray-900 rounded-lg border border-gray-800 p-4 animate-fade-in">
             <div className="flex items-center justify-between mb-2">
               <h3 className={`font-semibold text-sm uppercase ${AGENT_COLORS[agent] || 'text-gray-300'}`}>
-                {agent}
+                {AGENT_NAMES[agent] || agent}
               </h3>
               {currentSession?.confidence != null && agent === 'moderator' && (
                 <ConfidenceBar value={currentSession.confidence} size="sm" />

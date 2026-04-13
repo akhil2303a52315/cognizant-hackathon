@@ -107,6 +107,20 @@ def _register_all_tools():
     from backend.mcp.tools.weather_tools import TOOLS as weather_tools
     from backend.mcp.tools.knowledge_tools import TOOLS as knowledge_tools
     from backend.mcp.tools.trade_tools import TOOLS as trade_tools
+    from backend.mcp.tools.alpha_vantage_tools import TOOLS as alpha_vantage_tools
+    from backend.mcp.tools.polygon_tools import TOOLS as polygon_tools
+    from backend.mcp.tools.openweather_tools import TOOLS as openweather_tools
+    from backend.mcp.tools.mediastack_tools import TOOLS as mediastack_tools
+    from backend.mcp.tools.noaa_tools import TOOLS as noaa_tools
+    from backend.mcp.tools.nvd_tools import TOOLS as nvd_tools
+    from backend.mcp.tools.currents_tools import TOOLS as currents_tools
+    from backend.mcp.tools.twelvedata_tools import TOOLS as twelvedata_tools
+    from backend.mcp.tools.fmp_tools import TOOLS as fmp_tools
+    from backend.mcp.tools.shodan_tools import TOOLS as shodan_tools
+    from backend.mcp.tools.exchangerate_tools import TOOLS as exchangerate_tools
+    from backend.mcp.tools.gnews_tools import TOOLS as gnews_tools
+    from backend.mcp.tools.marketaux_tools import TOOLS as marketaux_tools
+    from backend.mcp.tools.graphhopper_tools import TOOLS as graphhopper_tools
 
     for reg in [reg_news, reg_supplier, reg_shipping, reg_commodity, reg_finance, reg_social, reg_firecrawl]:
         reg()
@@ -120,6 +134,20 @@ def _register_all_tools():
         (weather_tools, "disaster"),
         (knowledge_tools, "knowledge"),
         (trade_tools, "trade"),
+        (alpha_vantage_tools, "commodity"),
+        (polygon_tools, "financial"),
+        (openweather_tools, "weather"),
+        (mediastack_tools, "news"),
+        (noaa_tools, "climate"),
+        (nvd_tools, "cyber"),
+        (currents_tools, "news"),
+        (twelvedata_tools, "financial"),
+        (fmp_tools, "financial"),
+        (shodan_tools, "cyber"),
+        (exchangerate_tools, "forex"),
+        (gnews_tools, "news"),
+        (marketaux_tools, "financial"),
+        (graphhopper_tools, "logistics"),
     ]:
         for t in tool_list:
             register_tool(

@@ -66,6 +66,24 @@ class Settings(BaseSettings):
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
 
+    # New External Data APIs (Day 7+)
+    alpha_vantage_api_key: str = ""
+    polygon_api_key: str = ""
+    openweathermap_api_key: str = ""
+    mediastack_api_key: str = ""
+    noaa_api_key: str = ""
+    nist_nvd_api_key: str = ""
+    currents_api_key: str = ""
+
+    # Additional External Data APIs (Day 7+)
+    twelvedata_api_key: str = ""
+    fmp_api_key: str = ""  # Financial Modeling Prep
+    shodan_api_key: str = ""
+    exchangerate_api_key: str = ""
+    gnews_api_key: str = ""
+    marketaux_api_key: str = ""
+    graphhopper_api_key: str = ""
+
     # App
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
     api_keys: str = "dev-key"

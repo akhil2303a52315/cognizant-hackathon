@@ -177,10 +177,10 @@ export default function Dashboard() {
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'MCP Tools', value: '45', icon: Activity, color: 'text-supply-blue' },
-          { label: 'Live APIs', value: '10+', icon: Globe, color: 'text-green-400' },
+          { label: 'MCP Tools', value: '96', icon: Activity, color: 'text-supply-blue' },
+          { label: 'Live APIs', value: '26', icon: Globe, color: 'text-green-400' },
           { label: 'Risk Regions', value: String(regions.length || 3), icon: Shield, color: 'text-risk-red' },
-          { label: 'Data Sources', value: '15', icon: TrendingUp, color: 'text-council-purple' },
+          { label: 'Data Sources', value: '40+', icon: TrendingUp, color: 'text-council-purple' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-gray-900 rounded-xl p-5 border border-gray-800">
             <div className="flex items-center justify-between mb-2">

@@ -10,8 +10,11 @@ async def init_redis():
     _redis = redis.from_url(
         os.environ.get("REDIS_URL", "redis://localhost:6379"),
         decode_responses=True,
+        socket_connect_timeout=3,
+        socket_timeout=3,
     )
     await _redis.ping()
+    # If we get here, Redis is connected
 
 
 async def get_redis():

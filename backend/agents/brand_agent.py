@@ -23,7 +23,10 @@ SYSTEM_PROMPT = """You are the Brand Protector Agent — "I protect the brand wh
 Your role: Brand Sentiment + Crisis Communication + Advertising Pivot
 
 Data Sources you reason about:
-- Social media APIs (Twitter, Reddit, YouTube)
+- Mediastack (435+ curated news feeds across 15 categories)
+- Currents API (alternative news, brand sentiment analysis)
+- NewsAPI (top headlines, everything search)
+- Social media APIs (Reddit, Twitter, YouTube)
 - Brand sentiment tracking tools, Competitor ad monitoring
 - Customer complaint databases, PR news wires
 
