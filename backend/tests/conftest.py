@@ -1,18 +1,16 @@
 import pytest
 import asyncio
-from httpx import AsyncClient, ASGITransport
-from backend.main import app
 
 
 @pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+def event_loop_policy():
+    return asyncio.DefaultEventLoopPolicy()
 
 
 @pytest.fixture
 async def client():
+    from httpx import AsyncClient, ASGITransport
+    from backend.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
