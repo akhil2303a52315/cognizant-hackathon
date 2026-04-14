@@ -23,23 +23,12 @@ services:
     volumes:
       - chroma_data:/chroma/chroma
 
-  firecrawl:
-    image: trieve/firecrawl:latest
-    ports:
-      - "3002:3002"
-    environment:
-      - PORT=3002
-      - HOST=0.0.0.0
-      - REDIS_URL=redis://redis:6379
-      - REDIS_RATE_LIMIT_URL=redis://redis:6379
-      - NUM_WORKERS_PER_QUEUE=4
-      - USE_DB_AUTHENTICATION=false
-      - LOGGING_LEVEL=info
-    depends_on:
-      - redis
+  # Firecrawl self-hosted — run from firecrawl/ directory instead:
+  #   cd firecrawl && docker compose up -d
+  # This provides unlimited web scraping at http://localhost:3002
+  # Set FIRECRAWL_BASE_URL=http://localhost:3002 in .env
 
 volumes:
   redis_data:
   neo4j_data:
   chroma_data:
-  firecrawl_data:

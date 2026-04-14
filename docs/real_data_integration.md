@@ -1,8 +1,8 @@
 # Real Data Integration — Complete ✅
 
-> **Status:** All 12 custom MCPs integrated and tested
-> **Total MCP Tools:** 45 (was 22) | **Live APIs:** 12 | **Mock Fallbacks:** 0 (all live)
-> **Integration Date:** Day 6
+> **Status:** 27+ live APIs, 99 MCP tools, self-hosted Firecrawl for unlimited web scraping
+> **Total MCP Tools:** 99 | **Live APIs:** 27 | **Firecrawl:** Self-hosted (unlimited)
+> **Integration Date:** Day 6–8
 
 ---
 
@@ -22,6 +22,7 @@
 | **GDELT** | `gdelt_events`, `gdelt_tone` | ✅ LIVE | Geopolitical events (rate-limited) |
 | **SEC EDGAR** | `sec_filing` | ✅ LIVE | Company filings |
 | **OpenCorporates** | `opencorporates_search` | ✅ LIVE | Company registry search |
+| **Firecrawl (self-hosted)** | `web_scrape`, `web_crawl`, `web_search`, `web_extract_data`, `web_scrape_supplier`, `web_scrape_news` | ✅ LIVE | Unlimited web scraping at localhost:3002 |
 
 ---
 

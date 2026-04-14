@@ -308,8 +308,11 @@ Each agent generates **30/60/90-day predictions** using ensemble ML models:
 - **Core**: Python 3.12, LangGraph 0.2+, LangChain 0.3+, FastAPI 0.115+
 - **State Management**: LangGraph Checkpointer (PostgreSQL + Redis)
 - **Observability**: LangSmith (tracing, cost, latency, debug)
-- **Database**: PostgreSQL 16 (state persistence) + Redis 7 (cache)
-- **LLM**: Groq (Llama-3.3-70B-fast) / Anthropic Claude via AWS Bedrock
+- **Database**: PostgreSQL 16 (state persistence) + Redis 7 (cache) + Neo4j 5 (graph) + ChromaDB (vectors)
+- **LLM**: Groq (Llama-3.3-70B-fast) / Anthropic Claude via AWS Bedrock / Gemini (extract)
+- **MCP Tools**: 99 tools across 27+ live APIs (Finnhub, Polygon, Alpha Vantage, NOAA, NVD, etc.)
+- **Web Scraping**: Firecrawl (self-hosted, unlimited) — 6 tools: scrape, crawl, search, extract, supplier, news
+- **RAG**: LangChain + ChromaDB + Neo4j Graph RAG + Firecrawl URL loader
 - **Tools**: uv (package manager), Docker, dotenv, pytest, GitHub Actions stub
 
 ### Frontend
@@ -328,6 +331,32 @@ Each agent generates **30/60/90-day predictions** using ensemble ML models:
 - **Containers**: Docker + docker-compose
 - **Orchestration**: Kubernetes (optional), AWS ECS/Fargate
 - **Monitoring**: Prometheus/Grafana stub, LangSmith
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone and install
+git clone https://github.com/Rohithdgrr/cognizant-hackathon.git
+cd project
+python -m venv venv && venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+
+# 2. Configure .env
+cp .env.example .env  # Fill in API keys
+
+# 3. Start everything (Windows)
+start-all.bat
+
+# Or start manually:
+docker compose up -d redis neo4j chromadb   # Databases
+cd firecrawl && docker compose up -d        # Firecrawl web scraping
+venv\Scripts\python -m uvicorn backend.main:app --port 8000  # Backend
+cd frontend && npm install && npm run dev    # Frontend
+```
+
+**Services**: Backend (8000) | Frontend (3000) | Firecrawl (3002) | Redis (6379) | Neo4j (7474) | ChromaDB (8001)
 
 ---
 

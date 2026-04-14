@@ -1,16 +1,17 @@
 """MCP Server definitions for SupplyChainGPT Council.
 
-Groups the 47+ registered MCP tools into logical server categories,
+Groups the 99 registered MCP tools into logical server categories,
 each representing a domain-specific MCP server. These definitions
 drive the MultiServerMCPClient in mcp_toolkit.py and determine
 which tools are available to which agents via least-privilege scopes.
 
 Server categories:
-  - news_geopolitical: GDELT, GDACS, NewsAPI, Wikipedia
-  - shipping_logistics: Route optimization, port status, freight rates, weather, earthquakes
+  - news_geopolitical: GDELT, GDACS, NewsAPI, Currents, Mediastack, Wikipedia
+  - shipping_logistics: Route optimization, GraphHopper, port status, weather, earthquakes
   - erp_inventory: ERP queries, supplier search, contracts, Neo4j graph
-  - finance_market: Finnhub, Frankfurter, FRED/Yahoo, commodity prices, trade data
-  - web_intel: Firecrawl scrape/crawl/search, Reddit, Arxiv
+  - finance_market: Finnhub, Frankfurter, Alpha Vantage, Polygon, Twelve Data, FMP, ExchangeRate, MarketAux
+  - web_intel: Firecrawl (scrape/crawl/search/extract/supplier/news), Reddit, social sentiment, competitor intel
+  - cyber_security: NIST NVD, Shodan InternetDB
   - rag: Agentic RAG, Graph RAG v2, basic RAG query
 """
 

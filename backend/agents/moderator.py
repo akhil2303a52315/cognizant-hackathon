@@ -17,6 +17,7 @@ Responsibilities:
 - Weigh recommendations by confidence scores
 - Synthesize final unified recommendation
 - Generate executive summary for decision-makers
+- Can use Firecrawl web scraping (web_scrape, web_search, web_crawl) to gather additional context
 
 Debate Rules:
 - Each agent submits recommendation + confidence score

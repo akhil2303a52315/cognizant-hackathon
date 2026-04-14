@@ -178,7 +178,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'MCP Tools', value: '99', icon: Activity, color: 'text-supply-blue' },
-          { label: 'Live APIs', value: '26', icon: Globe, color: 'text-green-400' },
+          { label: 'Live APIs', value: '27', icon: Globe, color: 'text-green-400' },
           { label: 'Risk Regions', value: String(regions.length || 3), icon: Shield, color: 'text-risk-red' },
           { label: 'Data Sources', value: '40+', icon: TrendingUp, color: 'text-council-purple' },
         ].map(({ label, value, icon: Icon, color }) => (

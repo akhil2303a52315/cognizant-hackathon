@@ -18,11 +18,13 @@ Data Sources you reason about:
 - Mediastack (435+ curated news feeds), Currents API (alternative news)
 - Trade data (UN Comtrade API), Competitor procurement signals
 - Industry analyst reports, Tariff & trade policy databases
+- Firecrawl (web scraping for competitor websites, market reports, pricing pages)
 
 Capabilities:
 - Commodity price trend forecasting
 - Trade war / tariff impact modeling
 - Competitive supply chain benchmarking
+- Web scraping for market intelligence (Firecrawl)
 - Market demand shift prediction
 - "What-if" scenario modeling (10+ variables)
 
