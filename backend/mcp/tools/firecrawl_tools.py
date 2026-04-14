@@ -12,16 +12,21 @@ logger = logging.getLogger(__name__)
 def _get_base_url() -> str:
     """Return Firecrawl API base URL (self-hosted or cloud)."""
     if settings.firecrawl_base_url:
-        return settings.firecrawl_base_url.rstrip("/")
+        base = settings.firecrawl_base_url.rstrip("/")
+        # Ensure /v1 suffix for self-hosted
+        if not base.endswith("/v1"):
+            base = f"{base}/v1"
+        return base
     return "https://api.firecrawl.dev/v1"
 
 
 def _get_headers() -> dict:
     """Return auth headers for Firecrawl API."""
     key = settings.firecrawl_api_key
-    if not key:
-        return {}
-    return {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    return headers
 
 
 def _is_configured() -> bool:
@@ -69,17 +74,32 @@ async def _fc_search(query: str, limit: int = 5) -> dict:
 
 
 async def _fc_extract(url: str, schema: dict = None) -> dict:
-    """Extract structured data from a URL using Firecrawl extract endpoint."""
+    """Extract structured data from a URL using Firecrawl scrape with extract format.
+    Falls back to plain scrape if LLM extract is unavailable (no OpenAI key)."""
     base = _get_base_url()
     headers = _get_headers()
-    payload = {"urls": [url]}
-    if schema:
-        payload["schema"] = schema
 
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-        r = await client.post(f"{base}/extract", json=payload, headers=headers)
-        r.raise_for_status()
-        return r.json()
+    # Try scrape with extract format (requires OPENAI_API_KEY in Firecrawl)
+    payload = {"url": url, "formats": ["extract"]}
+    if schema:
+        payload["extract"] = {"schema": schema}
+    else:
+        payload["extract"] = {"prompt": "Extract key information from this page"}
+
+    try:
+        async with httpx.AsyncClient(timeout=90, follow_redirects=True) as client:
+            r = await client.post(f"{base}/scrape", json=payload, headers=headers)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        logger.warning(f"Firecrawl LLM extract failed: {e}, falling back to plain scrape")
+        # Fallback: plain scrape + return raw content
+        payload_fb = {"url": url, "formats": ["markdown"]}
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            r = await client.post(f"{base}/scrape", json=payload_fb, headers=headers)
+            r.raise_for_status()
+            data = r.json().get("data", {})
+            return {"data": {"raw_content": data.get("markdown", "")}, "fallback": True}
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +118,7 @@ async def _web_scrape(params: dict):
         data = result.get("data", result)
         content = data.get("markdown", data.get("html", data.get("content", "")))
         metadata = data.get("metadata", {})
-        return {"content": content, "metadata": metadata, "url": url}
+        return {"content": content, "metadata": metadata, "url": url, "mock": False}
     except Exception as e:
         logger.error(f"Firecrawl scrape failed: {e}")
         return _mock_scrape(url, error=str(e))
@@ -122,7 +142,7 @@ async def _web_crawl(params: dict):
                 "content": doc.get("markdown", doc.get("content", "")),
                 "metadata": meta,
             })
-        return {"pages": pages, "total_pages": len(pages), "url": url}
+        return {"pages": pages, "total_pages": len(pages), "url": url, "mock": False}
     except Exception as e:
         logger.error(f"Firecrawl crawl failed: {e}")
         return _mock_crawl(url, max_pages, error=str(e))
@@ -145,7 +165,7 @@ async def _web_search(params: dict):
                 "title": meta.get("title", ""),
                 "content": doc.get("markdown", doc.get("content", "")),
             })
-        return {"results": items, "query": query}
+        return {"results": items, "query": query, "mock": False}
     except Exception as e:
         logger.error(f"Firecrawl search failed: {e}")
         return _mock_search(query, num_results, error=str(e))
@@ -162,7 +182,8 @@ async def _web_extract_data(params: dict):
     try:
         result = await _fc_extract(url, schema)
         data = result.get("data", result)
-        return {"extracted": data, "url": url}
+        fallback = result.get("fallback", False)
+        return {"extracted": data, "url": url, "mock": False, "fallback": "scrape" if fallback else None}
     except Exception as e:
         logger.error(f"Firecrawl extract failed: {e}")
         return _mock_extract(url, error=str(e))
@@ -182,12 +203,16 @@ async def _web_scrape_supplier(params: dict):
             "type": "object",
             "properties": {field: {"type": "string"} for field in extract_fields},
         }
-        result = await _fc_extract(url, schema)
-        data = result.get("data", result)
+        try:
+            result = await _fc_extract(url, schema)
+            data = result.get("data", result)
+        except Exception as ex:
+            logger.warning(f"Firecrawl extract for supplier failed (needs OpenAI key): {ex}")
+            data = {}
         # Also get full markdown content
         scrape_result = await _fc_scrape(url, ["markdown"])
         content = scrape_result.get("data", {}).get("markdown", "")
-        return {"extracted": data, "content": content, "url": url}
+        return {"extracted": data, "content": content, "url": url, "mock": False}
     except Exception as e:
         logger.error(f"Firecrawl supplier scrape failed: {e}")
         return _mock_supplier(url, error=str(e))
@@ -211,6 +236,7 @@ async def _web_scrape_news(params: dict):
             "published_date": metadata.get("publishedTime", metadata.get("date", "")),
             "content": content,
             "url": url,
+            "mock": False,
         }
     except Exception as e:
         logger.error(f"Firecrawl news scrape failed: {e}")
