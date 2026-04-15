@@ -30,6 +30,7 @@ from backend.routes.settings import router as settings_router
 from backend.rag.api import router as rag_router
 from backend.routes.market import router as market_router
 from backend.routes.observability import router as observability_router
+from backend.routes.council_v2 import router as council_v2_router
 from backend.ws.server import websocket_endpoint
 
 # Setup structured JSON logging
@@ -115,6 +116,7 @@ app.mount("/mcp", mcp_app)
 app.include_router(health_router, tags=["Health"])
 app.include_router(models_router, prefix="/models", tags=["Models"])
 app.include_router(council_router, prefix="/council", tags=["Council"])
+app.include_router(council_v2_router, prefix="/council/v2", tags=["Council V2"])
 app.include_router(risk_router, prefix="/risk", tags=["Risk"])
 app.include_router(ingest_router, prefix="/ingest", tags=["Ingest"])
 app.include_router(optimize_router, prefix="/optimize", tags=["Optimize"])

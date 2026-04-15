@@ -5,6 +5,7 @@ interface AppSettings {
   api_key: string
   mcp_api_key: string
   theme: 'dark' | 'light'
+  sidebar_collapsed: boolean
   rag_chunk_size: number
   rag_chunk_overlap: number
   rag_top_k: number
@@ -22,7 +23,8 @@ interface SettingsState {
 const defaultSettings: AppSettings = {
   api_key: 'dev-key',
   mcp_api_key: 'dev-mcp-key',
-  theme: 'dark',
+  theme: 'light',
+  sidebar_collapsed: false,
   rag_chunk_size: 512,
   rag_chunk_overlap: 50,
   rag_top_k: 5,

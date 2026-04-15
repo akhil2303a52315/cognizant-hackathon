@@ -4,10 +4,11 @@ import Navbar from './components/layout/Navbar'
 import ToastContainer from './components/shared/Toast'
 import Dashboard from './pages/Dashboard'
 import Chat from './pages/Chat'
-import Debate from './pages/Debate'
 import Brand from './pages/Brand'
+import Debate from './pages/Debate'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
+import { useSettingsStore } from './store/settingsStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,9 +19,9 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-gray-950">
+      <div className="min-h-screen bg-slate-50">
         <Navbar />
-        <main className="pt-16">
+        <main className="pt-14 lg:pt-16 transition-all duration-300">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />

@@ -9,17 +9,17 @@ interface StatusBadgeProps {
 }
 
 const statusStyles: Record<Status, string> = {
-  online: 'bg-success-green/20 text-success-green border-success-green/30',
-  offline: 'bg-gray-600/20 text-gray-400 border-gray-600/30',
-  error: 'bg-risk-red/20 text-risk-red border-risk-red/30',
-  loading: 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30 animate-pulse',
+  online: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  offline: 'bg-gray-100 text-gray-500 border-gray-200',
+  error: 'bg-red-50 text-red-700 border-red-200',
+  loading: 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse',
 }
 
 const dotStyles: Record<Status, string> = {
-  online: 'bg-success-green',
-  offline: 'bg-gray-500',
-  error: 'bg-risk-red',
-  loading: 'bg-yellow-500 animate-pulse',
+  online: 'bg-emerald-500',
+  offline: 'bg-gray-400',
+  error: 'bg-red-500',
+  loading: 'bg-amber-500 animate-pulse',
 }
 
 export default function StatusBadge({ status, label, size = 'md' }: StatusBadgeProps) {

@@ -87,7 +87,9 @@ export const ragApi = {
 
 // --- Risk ---
 export const riskApi = {
+  suppliers: () => api.get('/risk/suppliers'),
   supplier: (name: string) => api.get(`/risk/supplier/${name}`),
+  supplierScore: (id: string) => api.get(`/risk/score/${id}`),
   heatmap: () => api.get('/risk/heatmap'),
   alerts: () => api.get('/risk/alerts'),
   assess: (supplier: string) => api.post('/risk/assess', { supplier }),

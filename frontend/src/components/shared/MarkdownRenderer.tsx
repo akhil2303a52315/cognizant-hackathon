@@ -20,14 +20,14 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
         .replace(/^# (.+)$/gm, '<h1>$1</h1>')
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/`(.+?)`/g, '<code class="bg-gray-800 px-1 rounded text-sm">$1</code>')
+        .replace(/`(.+?)`/g, '<code class="bg-gray-100 px-1 rounded text-sm text-gray-800">$1</code>')
         .replace(/\n/g, '<br/>')
     }
   }, [content])
 
   return (
     <div
-      className={`prose prose-invert prose-sm max-w-none ${className}`}
+      className={`prose prose-sm max-w-none prose-gray ${className}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

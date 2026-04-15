@@ -10,11 +10,11 @@ interface LoadingSkeletonProps {
 
 function SkeletonCard() {
   return (
-    <div className="bg-gray-900 rounded-lg border border-gray-800 p-4 space-y-3 animate-pulse">
-      <div className="h-4 bg-gray-700 rounded w-3/4" />
-      <div className="h-3 bg-gray-700 rounded w-1/2" />
-      <div className="h-3 bg-gray-700 rounded w-full" />
-      <div className="h-3 bg-gray-700 rounded w-5/6" />
+    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3 animate-pulse shadow-card">
+      <div className="h-4 bg-gray-200 rounded w-3/4" />
+      <div className="h-3 bg-gray-100 rounded w-1/2" />
+      <div className="h-3 bg-gray-100 rounded w-full" />
+      <div className="h-3 bg-gray-100 rounded w-5/6" />
     </div>
   )
 }
@@ -22,10 +22,10 @@ function SkeletonCard() {
 function SkeletonTable() {
   return (
     <div className="space-y-2 animate-pulse">
-      <div className="h-8 bg-gray-800 rounded" />
-      <div className="h-8 bg-gray-800/60 rounded" />
-      <div className="h-8 bg-gray-800/40 rounded" />
-      <div className="h-8 bg-gray-800/30 rounded" />
+      <div className="h-8 bg-gray-100 rounded" />
+      <div className="h-8 bg-gray-50 rounded" />
+      <div className="h-8 bg-gray-50/60 rounded" />
+      <div className="h-8 bg-gray-50/40 rounded" />
     </div>
   )
 }
@@ -33,11 +33,11 @@ function SkeletonTable() {
 function SkeletonMessage() {
   return (
     <div className="flex gap-3 animate-pulse">
-      <div className="w-8 h-8 bg-gray-700 rounded-full shrink-0" />
+      <div className="w-8 h-8 bg-gray-200 rounded-full shrink-0" />
       <div className="flex-1 space-y-2">
-        <div className="h-3 bg-gray-700 rounded w-1/4" />
-        <div className="h-3 bg-gray-700 rounded w-full" />
-        <div className="h-3 bg-gray-700 rounded w-3/4" />
+        <div className="h-3 bg-gray-200 rounded w-1/4" />
+        <div className="h-3 bg-gray-100 rounded w-full" />
+        <div className="h-3 bg-gray-100 rounded w-3/4" />
       </div>
     </div>
   )
@@ -46,9 +46,9 @@ function SkeletonMessage() {
 function SkeletonText() {
   return (
     <div className="space-y-2 animate-pulse">
-      <div className="h-3 bg-gray-700 rounded w-full" />
-      <div className="h-3 bg-gray-700 rounded w-5/6" />
-      <div className="h-3 bg-gray-700 rounded w-4/6" />
+      <div className="h-3 bg-gray-200 rounded w-full" />
+      <div className="h-3 bg-gray-100 rounded w-5/6" />
+      <div className="h-3 bg-gray-100 rounded w-4/6" />
     </div>
   )
 }
