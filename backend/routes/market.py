@@ -86,6 +86,11 @@ async def risk_dashboard():
         {"name": "Taiwan (Semiconductors)", "lat": 25.0, "lon": 121.5},
         {"name": "Japan (Electronics)", "lat": 35.6, "lon": 139.7},
         {"name": "China (Manufacturing)", "lat": 31.2, "lon": 121.4},
+        {"name": "South Korea (Memory Hub)", "lat": 37.5, "lon": 127.0},
+        {"name": "Germany (Automotive Hub)", "lat": 52.5, "lon": 13.4},
+        {"name": "USA (West Coast Logistics)", "lat": 34.0, "lon": -118.2},
+        {"name": "Vietnam (Textile/Assembly)", "lat": 21.0, "lon": 105.8},
+        {"name": "Brazil (Iron/Agri Hub)", "lat": -23.5, "lon": -46.6},
     ]
 
     tasks = []

@@ -81,7 +81,7 @@ function EarthquakeAlert({ region }: { region: Record<string, unknown> }) {
   const forecast = (wx.forecast || []) as Array<Record<string, unknown>>
   const today = forecast[0]
   return (
-    <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-card hover:shadow-card-hover transition-all duration-300">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-100 shadow-risk hover:shadow-card-hover hover:-translate-y-1 transition-all duration-500 h-full">
       <h3 className="text-sm font-semibold mb-3 flex items-center gap-2 text-gray-700">
         <Globe className="w-4 h-4 text-violet-600" /> {name}
       </h3>
@@ -221,8 +221,14 @@ export default function Dashboard() {
             <div className="w-6 h-6 rounded-md bg-red-100 flex items-center justify-center"><Shield className="w-3.5 h-3.5 text-red-600" /></div>
             Supply Chain Risk Monitor
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {risk.isLoading ? <LoadingSkeleton variant="card" count={3} /> : regions.map((r, i) => <EarthquakeAlert key={i} region={r} />)}
+          <div className="flex gap-4 overflow-x-auto pb-6 pt-2 snap-x no-scrollbar">
+            {risk.isLoading ? (
+              <LoadingSkeleton variant="card" count={5} />
+            ) : regions.map((r, i) => (
+              <div key={i} className="min-w-[320px] md:min-w-[380px] snap-start">
+                <EarthquakeAlert region={r} />
+              </div>
+            ))}
           </div>
         </div>
         {disasters.length > 0 && (
