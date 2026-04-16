@@ -19,10 +19,16 @@ async def vector_retrieve(query: str, top_k: int = None) -> list[Document]:
 async def bm25_retrieve(query: str, top_k: int = None) -> list[Document]:
     top_k = top_k or settings.rag_top_k
     try:
+        import re
         from backend.db.neon import execute_query
+        terms = [re.sub(r"[^a-zA-Z0-9]", "", t) for t in query.split()]
+        terms = [t for t in terms if t]
+        if not terms:
+            return []
+        tsquery = " & ".join(terms)
         rows = await execute_query(
             "SELECT content, metadata FROM rag_document_chunks WHERE to_tsvector('english', content) @@ to_tsquery('english', $1) LIMIT $2",
-            " & ".join(query.split()),
+            tsquery,
             top_k,
         )
         return [Document(page_content=r["content"], metadata=r.get("metadata", {})) for r in rows]

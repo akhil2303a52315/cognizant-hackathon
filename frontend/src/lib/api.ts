@@ -56,7 +56,13 @@ mcpApi.interceptors.request.use((config) => {
 export const councilApi = {
   analyze: (query: string, context?: Record<string, unknown>) =>
     api.post('/council/analyze', { query, context }),
+  query: (query: string, context?: Record<string, unknown>, stream = false) =>
+    api.post('/council/query', { query, context, stream }),
   streamUrl: () => `${API_BASE}/council/stream`,
+  session: (sessionId: string) =>
+    api.get(`/council/session/${sessionId}`),
+  history: (limit = 20, offset = 0) =>
+    api.get('/council/history', { params: { limit, offset } }),
   exportPdf: (sessionId: string) =>
     api.get(`/council/export/${sessionId}`, { responseType: 'blob' }),
 }
@@ -88,29 +94,28 @@ export const ragApi = {
 // --- Risk ---
 export const riskApi = {
   suppliers: () => api.get('/risk/suppliers'),
-  supplier: (name: string) => api.get(`/risk/supplier/${name}`),
-  supplierScore: (id: string) => api.get(`/risk/score/${id}`),
   heatmap: () => api.get('/risk/heatmap'),
-  alerts: () => api.get('/risk/alerts'),
-  assess: (supplier: string) => api.post('/risk/assess', { supplier }),
+  supplierScore: (id: string) => api.get(`/risk/score/${id}`),
 }
 
 // --- Optimize ---
 export const optimizeApi = {
   routes: (data: Record<string, unknown>) => api.post('/optimize/routes', data),
-  inventory: (data: Record<string, unknown>) => api.post('/optimize/inventory', data),
+  allocation: (data: Record<string, unknown>) => api.post('/optimize/allocation', data),
 }
 
 // --- Ingest ---
 export const ingestApi = {
-  status: () => api.get('/ingest/status'),
-  start: (source: string) => api.post('/ingest/start', { source }),
+  erp: (data: Record<string, unknown>) => api.post('/ingest/erp', data),
+  news: (articles: Record<string, unknown>[]) => api.post('/ingest/news', { articles }),
+  social: (posts: Record<string, unknown>[], platform?: string) =>
+    api.post('/ingest/social', { posts, platform }),
 }
 
 // --- Settings ---
 export const settingsApi = {
-  get: () => api.get('/settings'),
-  update: (data: Record<string, unknown>) => api.put('/settings', data),
+  get: () => api.get('/settings/app'),
+  update: (data: Record<string, unknown>) => api.put('/settings/app', data),
 }
 
 // --- Health ---
@@ -127,8 +132,20 @@ export const modelsApi = {
 // --- MCP ---
 export const mcpApiMethods = {
   listTools: () => mcpApi.get('/tools'),
+  manifest: () => mcpApi.get('/manifest'),
+  toolsForAgent: (agent: string) => mcpApi.get(`/tools/${agent}`),
+  health: () => mcpApi.get('/health'),
   invoke: (tool: string, params: Record<string, unknown>) =>
     mcpApi.post(`/tools/${tool}/invoke`, params),
+}
+
+// --- Observability ---
+export const observabilityApi = {
+  traces: (sessionId?: string, limit = 20) =>
+    api.get('/observability/traces', { params: { session_id: sessionId, limit } }),
+  metrics: () => api.get('/observability/metrics'),
+  spans: (sessionId?: string) =>
+    api.get('/observability/spans', { params: { session_id: sessionId } }),
 }
 
 // --- Market (Real-Time Data) ---

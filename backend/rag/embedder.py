@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from typing import List
 
 logger = logging.getLogger(__name__)
@@ -48,9 +49,11 @@ def get_embeddings():
 
 async def embed_texts(texts: List[str]) -> List[List[float]]:
     model = get_embeddings()
-    return await model.aembed_documents(texts)
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, model.embed_documents, texts)
 
 
 async def embed_query(text: str) -> List[float]:
     model = get_embeddings()
-    return await model.aembed_query(text)
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, model.embed_query, text)

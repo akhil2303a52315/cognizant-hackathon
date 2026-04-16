@@ -20,17 +20,16 @@ describe('councilV2Store', () => {
     expect(state.supervisorResult).toBeNull()
   })
 
-  it('initializes all 7 agents with idle status', () => {
+  it('initializes all 6 agents with idle status', () => {
     const { agents } = useCouncilV2Store.getState()
     const keys = Object.keys(agents)
-    expect(keys).toHaveLength(7)
-    expect(keys).toContain('analyst')
-    expect(keys).toContain('critic')
-    expect(keys).toContain('creative')
+    expect(keys).toHaveLength(6)
     expect(keys).toContain('risk')
-    expect(keys).toContain('legal')
+    expect(keys).toContain('supply')
+    expect(keys).toContain('logistics')
     expect(keys).toContain('market')
-    expect(keys).toContain('optimizer')
+    expect(keys).toContain('finance')
+    expect(keys).toContain('brand')
 
     for (const key of keys) {
       const agent = agents[key]!
@@ -55,7 +54,7 @@ describe('councilV2Store', () => {
     expect(state.isStreaming).toBe(true)
     expect(state.sessionId).toBe('test-session-1')
     expect(state.query).toBe('What are supply chain risks?')
-    expect(state.selectedAgent).toBe('analyst')
+    expect(state.selectedAgent).toBe('risk')
     expect(state.viewMode).toBe('agent')
   })
 
@@ -74,22 +73,22 @@ describe('councilV2Store', () => {
 
   it('handles agent_start for round 1', () => {
     useCouncilV2Store.getState().handleV2Event({ type: 'start', session_id: 's1' })
-    useCouncilV2Store.getState().handleV2Event({ type: 'agent_start', agent: 'analyst', round: 1 })
+    useCouncilV2Store.getState().handleV2Event({ type: 'agent_start', agent: 'risk', round: 1 })
 
     const state = useCouncilV2Store.getState()
-    expect(state.agents.analyst!.round1.status).toBe('thinking')
-    expect(state.agents.analyst!.round1.output).toBe('')
-    expect(state.selectedAgent).toBe('analyst')
+    expect(state.agents.risk!.round1.status).toBe('thinking')
+    expect(state.agents.risk!.round1.output).toBe('')
+    expect(state.selectedAgent).toBe('risk')
   })
 
   it('handles token event for agent', () => {
     useCouncilV2Store.getState().handleV2Event({ type: 'start', session_id: 's1' })
-    useCouncilV2Store.getState().handleV2Event({ type: 'agent_start', agent: 'critic', round: 1 })
-    useCouncilV2Store.getState().handleV2Event({ type: 'token', agent: 'critic', round: 1, content: 'Hello ' })
-    useCouncilV2Store.getState().handleV2Event({ type: 'token', agent: 'critic', round: 1, content: 'World' })
+    useCouncilV2Store.getState().handleV2Event({ type: 'agent_start', agent: 'supply', round: 1 })
+    useCouncilV2Store.getState().handleV2Event({ type: 'token', agent: 'supply', round: 1, content: 'Hello ' })
+    useCouncilV2Store.getState().handleV2Event({ type: 'token', agent: 'supply', round: 1, content: 'World' })
 
     const state = useCouncilV2Store.getState()
-    expect(state.agents.critic!.round1.output).toBe('Hello World')
+    expect(state.agents.supply!.round1.output).toBe('Hello World')
   })
 
   it('handles agent_done event', () => {
@@ -104,12 +103,12 @@ describe('councilV2Store', () => {
 
   it('handles agent_error event', () => {
     useCouncilV2Store.getState().handleV2Event({ type: 'start', session_id: 's1' })
-    useCouncilV2Store.getState().handleV2Event({ type: 'agent_start', agent: 'legal', round: 1 })
-    useCouncilV2Store.getState().handleV2Event({ type: 'agent_error', agent: 'legal', round: 1, error: 'Timeout' })
+    useCouncilV2Store.getState().handleV2Event({ type: 'agent_start', agent: 'finance', round: 1 })
+    useCouncilV2Store.getState().handleV2Event({ type: 'agent_error', agent: 'finance', round: 1, error: 'Timeout' })
 
     const state = useCouncilV2Store.getState()
-    expect(state.agents.legal!.round1.status).toBe('error')
-    expect(state.agents.legal!.round1.output).toBe('Error: Timeout')
+    expect(state.agents.finance!.round1.status).toBe('error')
+    expect(state.agents.finance!.round1.output).toBe('Error: Timeout')
   })
 
   it('handles token for supervisor', () => {
@@ -132,7 +131,7 @@ describe('councilV2Store', () => {
     useCouncilV2Store.getState().handleV2Event({
       type: 'moderator_done',
       round: 1,
-      scores: { analyst: 85, critic: 70, creative: 60, risk: 80, legal: 75, market: 65, optimizer: 90 },
+      scores: { risk: 85, supply: 70, logistics: 60, market: 80, finance: 75, brand: 65 },
       consensus: 75,
       summary: 'Good analysis overall',
     })
@@ -140,7 +139,7 @@ describe('councilV2Store', () => {
     const state = useCouncilV2Store.getState()
     expect(state.moderatorR1).not.toBeNull()
     expect(state.moderatorR1!.consensus).toBe(75)
-    expect(state.moderatorR1!.scores.analyst).toBe(85)
+    expect(state.moderatorR1!.scores.risk).toBe(85)
     expect(state.moderatorR1!.summary).toBe('Good analysis overall')
   })
 
@@ -148,7 +147,7 @@ describe('councilV2Store', () => {
     useCouncilV2Store.getState().handleV2Event({
       type: 'moderator_done',
       round: 2,
-      scores: { analyst: 90, critic: 80, creative: 70, risk: 85, legal: 80, market: 75, optimizer: 95 },
+      scores: { risk: 90, supply: 80, logistics: 70, market: 85, finance: 80, brand: 75 },
       consensus: 85,
       summary: 'Strong consensus reached',
     })
@@ -191,17 +190,17 @@ describe('councilV2Store', () => {
 
     // Round 1
     store.handleV2Event({ type: 'round_start', round: 1, phase: 'analysis' })
-    store.handleV2Event({ type: 'agent_start', agent: 'analyst', round: 1 })
-    store.handleV2Event({ type: 'token', agent: 'analyst', round: 1, content: 'Analysis output' })
-    store.handleV2Event({ type: 'agent_done', agent: 'analyst', round: 1, confidence: 80 })
-    store.handleV2Event({ type: 'moderator_done', round: 1, scores: { analyst: 80 }, consensus: 70, summary: 'R1 summary' })
+    store.handleV2Event({ type: 'agent_start', agent: 'risk', round: 1 })
+    store.handleV2Event({ type: 'token', agent: 'risk', round: 1, content: 'Analysis output' })
+    store.handleV2Event({ type: 'agent_done', agent: 'risk', round: 1, confidence: 80 })
+    store.handleV2Event({ type: 'moderator_done', round: 1, scores: { risk: 80 }, consensus: 70, summary: 'R1 summary' })
 
     // Round 2
     store.handleV2Event({ type: 'round_start', round: 2, phase: 'debate' })
-    store.handleV2Event({ type: 'agent_start', agent: 'analyst', round: 2 })
-    store.handleV2Event({ type: 'token', agent: 'analyst', round: 2, content: 'Debate output' })
-    store.handleV2Event({ type: 'agent_done', agent: 'analyst', round: 2, confidence: 90 })
-    store.handleV2Event({ type: 'moderator_done', round: 2, scores: { analyst: 90 }, consensus: 85, summary: 'R2 summary' })
+    store.handleV2Event({ type: 'agent_start', agent: 'risk', round: 2 })
+    store.handleV2Event({ type: 'token', agent: 'risk', round: 2, content: 'Debate output' })
+    store.handleV2Event({ type: 'agent_done', agent: 'risk', round: 2, confidence: 90 })
+    store.handleV2Event({ type: 'moderator_done', round: 2, scores: { risk: 90 }, consensus: 85, summary: 'R2 summary' })
 
     // Round 3
     store.handleV2Event({ type: 'round_start', round: 3, phase: 'supervisor' })
@@ -213,10 +212,10 @@ describe('councilV2Store', () => {
     const state = useCouncilV2Store.getState()
     expect(state.isStreaming).toBe(false)
     expect(state.currentRound).toBe(3)
-    expect(state.agents.analyst!.round1.output).toBe('Analysis output')
-    expect(state.agents.analyst!.round1.confidence).toBe(80)
-    expect(state.agents.analyst!.round2.output).toBe('Debate output')
-    expect(state.agents.analyst!.round2.confidence).toBe(90)
+    expect(state.agents.risk!.round1.output).toBe('Analysis output')
+    expect(state.agents.risk!.round1.confidence).toBe(80)
+    expect(state.agents.risk!.round2.output).toBe('Debate output')
+    expect(state.agents.risk!.round2.confidence).toBe(90)
     expect(state.moderatorR1!.consensus).toBe(70)
     expect(state.moderatorR2!.consensus).toBe(85)
     expect(state.supervisorResult!.output).toBe('Final verdict')
@@ -243,9 +242,9 @@ describe('councilV2Store', () => {
 
   it('reset clears all state', () => {
     useCouncilV2Store.getState().handleV2Event({ type: 'start', session_id: 's1' })
-    useCouncilV2Store.getState().handleV2Event({ type: 'agent_start', agent: 'analyst', round: 1 })
-    useCouncilV2Store.getState().handleV2Event({ type: 'token', agent: 'analyst', round: 1, content: 'Some output' })
-    useCouncilV2Store.getState().handleV2Event({ type: 'agent_done', agent: 'analyst', round: 1, confidence: 75 })
+    useCouncilV2Store.getState().handleV2Event({ type: 'agent_start', agent: 'risk', round: 1 })
+    useCouncilV2Store.getState().handleV2Event({ type: 'token', agent: 'risk', round: 1, content: 'Some output' })
+    useCouncilV2Store.getState().handleV2Event({ type: 'agent_done', agent: 'risk', round: 1, confidence: 75 })
 
     useCouncilV2Store.getState().reset()
 
@@ -254,8 +253,8 @@ describe('councilV2Store', () => {
     expect(state.sessionId).toBeNull()
     expect(state.query).toBe('')
     expect(state.currentRound).toBe(0)
-    expect(state.agents.analyst!.round1.status).toBe('idle')
-    expect(state.agents.analyst!.round1.output).toBe('')
+    expect(state.agents.risk!.round1.status).toBe('idle')
+    expect(state.agents.risk!.round1.output).toBe('')
     expect(state.moderatorR1).toBeNull()
     expect(state.supervisorResult).toBeNull()
   })
@@ -266,7 +265,7 @@ describe('councilV2Store', () => {
     useCouncilV2Store.getState().handleV2Event({ type: 'token', agent: 'unknown_agent', round: 1, content: 'test' })
 
     const state = useCouncilV2Store.getState()
-    expect(Object.keys(state.agents)).toHaveLength(7)
+    expect(Object.keys(state.agents)).toHaveLength(6)
     expect(state.agents).not.toHaveProperty('unknown_agent')
   })
 

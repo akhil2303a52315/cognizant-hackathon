@@ -2,7 +2,7 @@ import { ShieldAlert, GitBranch, Navigation, TrendingUp, DollarSign, Megaphone, 
 
 export const AGENTS_CONFIG = [
   {
-    id: "risk_sentinel",
+    id: "risk",
     name: "Risk Sentinel",
     tagline: "I find threats before they find you",
     icon: ShieldAlert,
@@ -17,7 +17,7 @@ export const AGENTS_CONFIG = [
     accentColor: "#ef4444"
   },
   {
-    id: "supply_optimizer",
+    id: "supply",
     name: "Supply Optimizer",
     tagline: "I find you the best supplier, always",
     icon: GitBranch,
@@ -32,7 +32,7 @@ export const AGENTS_CONFIG = [
     accentColor: "#7c3aed"
   },
   {
-    id: "logistics_navigator",
+    id: "logistics",
     name: "Logistics Navigator",
     tagline: "I find the fastest, cheapest route — always",
     icon: Navigation,
@@ -47,7 +47,7 @@ export const AGENTS_CONFIG = [
     accentColor: "#0891b2"
   },
   {
-    id: "market_intelligence",
+    id: "market",
     name: "Market Intelligence",
     tagline: "I know what's coming before the market does",
     icon: TrendingUp,
@@ -62,7 +62,7 @@ export const AGENTS_CONFIG = [
     accentColor: "#d97706"
   },
   {
-    id: "finance_guardian",
+    id: "finance",
     name: "Finance Guardian",
     tagline: "I protect every dollar and maximize every investment",
     icon: DollarSign,
@@ -77,7 +77,7 @@ export const AGENTS_CONFIG = [
     accentColor: "#059669"
   },
   {
-    id: "brand_protector",
+    id: "brand",
     name: "Brand Protector",
     tagline: "I protect the brand when supply chains break",
     icon: Megaphone,

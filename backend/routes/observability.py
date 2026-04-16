@@ -296,7 +296,7 @@ async def debate_websocket(websocket: WebSocket):
                 })
 
             elif action == "approve":
-                # Human-in-the-loop approval
+                # Human-in-the-loop approval — resume the paused graph
                 sid = data.get("session_id", "")
                 if sid:
                     await websocket.send_json({
@@ -304,8 +304,36 @@ async def debate_websocket(websocket: WebSocket):
                         "session_id": sid,
                         "message": "Human approval received. Continuing synthesis...",
                     })
-                    # In a full implementation, this would resume the paused graph
-                    # by updating the state with human_approved=True
+                    # Resume the graph by re-invoking with human_approved=True
+                    try:
+                        from backend.routes.council import _get_council_compiled
+                        from backend.config import settings as _s
+                        if _s.human_in_loop:
+                            compiled = _get_council_compiled()
+                            # Get current state and update approval
+                            config = {"configurable": {"thread_id": sid}}
+                            state_snapshot = compiled.get_state(config)
+                            if state_snapshot:
+                                compiled.update_state(config, {"human_approved": True})
+                                # Stream the remaining nodes
+                                async for event in compiled.astream_events(None, config, version="v2"):
+                                    kind = event.get("event", "")
+                                    if kind == "on_chain_end" and event.get("name") == "synthesize":
+                                        output = event.get("data", {}).get("output", {})
+                                        await websocket.send_json({
+                                            "type": "complete",
+                                            "session_id": sid,
+                                            "recommendation": output.get("recommendation", ""),
+                                            "confidence": output.get("confidence", 0),
+                                            "risk_score": output.get("risk_score", 0),
+                                        })
+                    except Exception as e:
+                        logger.warning(f"Human approval resume failed: {e}")
+                        await websocket.send_json({
+                            "type": "error",
+                            "session_id": sid,
+                            "message": f"Approval resume failed: {e}",
+                        })
 
             elif action == "ping":
                 await websocket.send_json({"type": "pong", "ts": time.time()})

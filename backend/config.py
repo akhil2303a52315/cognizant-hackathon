@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     max_debate_rounds: int = 3
     confidence_gap_threshold: float = 20.0
     human_in_loop: bool = False
+    council_lite_mode: bool = False
+    enable_self_critique: bool = True
+    council_cache_ttl: int = 600  # 10 min cache for identical queries
 
     class Config:
         env_file = ".env"

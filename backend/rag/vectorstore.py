@@ -59,15 +59,19 @@ def _get_pinecone(collection_name: str):
 
 
 async def add_documents(docs: list[Document], collection_name: str = None) -> int:
+    import asyncio
     vs = get_vectorstore(collection_name)
-    ids = vs.add_documents(docs)
+    loop = asyncio.get_event_loop()
+    ids = await loop.run_in_executor(None, vs.add_documents, docs)
     logger.info(f"Added {len(ids)} documents to vectorstore")
     return len(ids)
 
 
 async def similarity_search(query: str, top_k: int = 5, collection_name: str = None) -> list[Document]:
+    import asyncio
     vs = get_vectorstore(collection_name)
-    results = vs.similarity_search_with_score(query, k=top_k)
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(None, vs.similarity_search_with_score, query, top_k)
     for doc, score in results:
         doc.metadata["relevance_score"] = float(score)
     return [doc for doc, _ in results]
@@ -76,8 +80,11 @@ async def similarity_search(query: str, top_k: int = 5, collection_name: str = N
 async def delete_collection(collection_name: str = None):
     global _vectorstore
     try:
-        vs = get_vectorstore(collection_name)
-        vs.delete_collection()
+        import asyncio
+        import chromadb
+        client = chromadb.PersistentClient(path=os.environ.get("CHROMA_PERSIST_DIR", "./chroma_data"))
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, client.delete_collection, collection_name)
         _vectorstore = None
         logger.info(f"Deleted collection: {collection_name}")
     except Exception as e:

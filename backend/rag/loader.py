@@ -76,26 +76,27 @@ async def load_document(file: BinaryIO, filename: str) -> list[Document]:
 
 
 async def _load_pdf(file: BinaryIO, filename: str) -> list[Document]:
+    file_content = file.read()
     try:
         from unstructured.partition.auto import partition_pdf
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(file.read())
+            tmp.write(file_content)
             tmp_path = tmp.name
         elements = partition_pdf(filename=tmp_path)
         os.unlink(tmp_path)
         return [Document(page_content=str(el), metadata={"page": i}) for i, el in enumerate(elements)]
     except ImportError:
         logger.info("unstructured not available, falling back to PyPDFLoader")
-        return _load_pdf_fallback(file, filename)
+        return _load_pdf_fallback(file_content, filename)
 
 
-def _load_pdf_fallback(file: BinaryIO, filename: str) -> list[Document]:
+def _load_pdf_fallback(file_content: bytes, filename: str) -> list[Document]:
     try:
         from langchain_community.document_loaders import PyPDFLoader
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(file.read())
+            tmp.write(file_content)
             tmp_path = tmp.name
         loader = PyPDFLoader(tmp_path)
         docs = loader.load()
@@ -103,22 +104,23 @@ def _load_pdf_fallback(file: BinaryIO, filename: str) -> list[Document]:
         return docs
     except ImportError:
         logger.warning("PyPDFLoader not available, reading raw text")
-        content = file.read().decode("utf-8", errors="replace")
+        content = file_content.decode("utf-8", errors="replace")
         return [Document(page_content=content, metadata={"filename": filename})]
 
 
 async def _load_docx(file: BinaryIO, filename: str) -> list[Document]:
+    file_content = file.read()
     try:
         from unstructured.partition.auto import partition_docx
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
-            tmp.write(file.read())
+            tmp.write(file_content)
             tmp_path = tmp.name
         elements = partition_docx(filename=tmp_path)
         os.unlink(tmp_path)
         return [Document(page_content=str(el), metadata={"page": i}) for i, el in enumerate(elements)]
     except ImportError:
-        content = file.read().decode("utf-8", errors="replace")
+        content = file_content.decode("utf-8", errors="replace")
         return [Document(page_content=content, metadata={"filename": filename})]
 
 

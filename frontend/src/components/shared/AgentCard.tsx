@@ -175,7 +175,7 @@ const AgentCard = ({ agent, isSelected, agentConfidence, handleSelectAgent }: Ag
                 border: `1px solid ${agent.accentColor}25`,
               }}
             >
-              {agent.role.split("+")[0].trim()}
+              {agent.role.split("+")[0]?.trim() ?? agent.role}
             </span>
           </div>
 

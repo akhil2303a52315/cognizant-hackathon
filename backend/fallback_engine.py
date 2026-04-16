@@ -213,7 +213,7 @@ class FallbackEngine:
             supply_agents = [o for o in agent_outputs if o.agent == "supply"]
             if supply_agents:
                 # Higher supply agent confidence → lower cost (better alternatives available)
-                conf_factor = 1.0 - (supply_agents[0].confidence / 200.0)
+                conf_factor = 1.0 - (supply_agents[0].confidence / 100.0)
                 customized["cost_estimate_usd"] = round(template.cost_estimate_usd * conf_factor)
 
             results.append(customized)

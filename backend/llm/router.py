@@ -23,13 +23,13 @@ PROVIDER_FACTORIES = {
 }
 
 ROUTING = {
-    "risk":      {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:meta-llama/llama-3.3-70b-instruct:free", "nvidia:meta/llama-3.1-70b-instruct", "nvidia:meta/llama-3.1-8b-instruct"]},
-    "supply":    {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:meta-llama/llama-3.3-70b-instruct:free", "nvidia:mistralai/mixtral-8x7b-instruct-v0.1", "nvidia:meta/llama-3.1-8b-instruct"]},
-    "logistics": {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:meta-llama/llama-3.3-70b-instruct:free", "nvidia:microsoft/phi-3-medium-128k-instruct", "nvidia:meta/llama-3.1-8b-instruct"]},
-    "market":    {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:meta-llama/llama-3.3-70b-instruct:free", "nvidia:meta/llama-3.1-8b-instruct", "nvidia:mistralai/mixtral-8x7b-instruct-v0.1"]},
-    "finance":   {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:meta-llama/llama-3.3-70b-instruct:free", "nvidia:mistralai/mistral-7b-instruct-v0.3", "nvidia:meta/llama-3.1-70b-instruct"]},
-    "brand":     {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:meta-llama/llama-3.3-70b-instruct:free", "nvidia:microsoft/phi-3-mini-128k-instruct", "nvidia:meta/llama-3.1-8b-instruct"]},
-    "moderator": {"primary": "groq:llama-3.3-70b-versatile", "fallback": ["openrouter:meta-llama/llama-3.3-70b-instruct:free", "nvidia:meta/llama-3.1-70b-instruct", "nvidia:mistralai/mixtral-8x7b-instruct-v0.1"]},
+    "risk":      {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
+    "supply":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
+    "logistics": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
+    "market":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
+    "finance":   {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
+    "brand":     {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
+    "moderator": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
 }
 
 

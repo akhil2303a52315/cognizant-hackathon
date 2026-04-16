@@ -14,6 +14,7 @@ import re
 import json
 import time
 import logging
+import asyncio
 from typing import Optional, Any
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
@@ -25,6 +26,92 @@ from backend.mcp.audit import audit_log
 from backend.mcp.cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker (per tool)
+# ---------------------------------------------------------------------------
+class CircuitBreaker:
+    """Circuit breaker for MCP tool calls.
+
+    States:
+      - CLOSED: normal operation, calls pass through
+      - OPEN: too many failures, calls are rejected immediately
+      - HALF_OPEN: testing recovery, allows one probe call
+    """
+
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+    def __init__(
+        self,
+        failure_threshold: int = 3,
+        recovery_timeout: float = 30.0,
+        half_open_max_calls: int = 1,
+    ):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.half_open_max_calls = half_open_max_calls
+        self._state = self.CLOSED
+        self._failure_count = 0
+        self._success_count = 0
+        self._last_failure_time: Optional[float] = None
+        self._half_open_calls = 0
+
+    @property
+    def state(self) -> str:
+        if self._state == self.OPEN:
+            if self._last_failure_time and (time.time() - self._last_failure_time) >= self.recovery_timeout:
+                self._state = self.HALF_OPEN
+                self._half_open_calls = 0
+        return self._state
+
+    def allow_call(self) -> bool:
+        state = self.state
+        if state == self.CLOSED:
+            return True
+        if state == self.HALF_OPEN:
+            if self._half_open_calls < self.half_open_max_calls:
+                self._half_open_calls += 1
+                return True
+            return False
+        return False  # OPEN
+
+    def record_success(self) -> None:
+        if self._state == self.HALF_OPEN:
+            self._success_count += 1
+            self._state = self.CLOSED
+            self._failure_count = 0
+        elif self._state == self.CLOSED:
+            self._failure_count = 0
+
+    def record_failure(self) -> None:
+        self._failure_count += 1
+        self._last_failure_time = time.time()
+        if self._state == self.HALF_OPEN:
+            self._state = self.OPEN
+        elif self._failure_count >= self.failure_threshold:
+            self._state = self.OPEN
+
+
+_circuit_breakers: dict[str, CircuitBreaker] = defaultdict(
+    lambda: CircuitBreaker()
+)
+
+
+def get_circuit_breaker(tool_name: str) -> CircuitBreaker:
+    return _circuit_breakers[tool_name]
+
+
+# ---------------------------------------------------------------------------
+# Retry configuration
+# ---------------------------------------------------------------------------
+RETRY_MAX_ATTEMPTS = 3
+RETRY_BASE_DELAY = 0.5  # seconds
+RETRY_MAX_DELAY = 10.0  # seconds
+RETRY_BACKOFF_FACTOR = 2.0
+RETRYABLE_EXCEPTIONS = (asyncio.TimeoutError, ConnectionError, OSError)
 
 
 # ---------------------------------------------------------------------------
@@ -272,51 +359,92 @@ class SecureMCPExecutor:
             _update_tool_health(tool_name, True, result_meta["latency_ms"])
             return result_meta
 
-        # Step 7: Execute tool (with timeout)
-        try:
-            import asyncio
-            from backend.mcp.registry import invoke_tool as registry_invoke
-            result = await asyncio.wait_for(
-                registry_invoke(tool_name, sanitized_params),
-                timeout=timeout_seconds,
+        # Step 7: Circuit breaker check
+        cb = get_circuit_breaker(tool_name)
+        if not cb.allow_call():
+            result_meta["latency_ms"] = int((time.time() - start) * 1000)
+            result_meta["warnings"].append(
+                f"Circuit breaker OPEN for tool '{tool_name}' (failures={cb._failure_count})"
             )
-            result_meta["result"] = sanitize_output(result)
-            result_meta["success"] = True
-            result_meta["latency_ms"] = int((time.time() - start) * 1000)
+            logger.warning(f"[SecureMCP:{self.agent_name}] Circuit breaker open: {tool_name}")
+            return result_meta
 
-            # Cache result
-            tool_info = registry_get_tool(tool_name)
-            ttl = tool_info.get("cache_ttl", 3600) if tool_info else 3600
-            await cache_set(f"mcp:{tool_name}:{input_hash}", result, ttl=ttl)
+        # Step 8: Execute tool with retry + timeout
+        from backend.mcp.registry import invoke_tool as registry_invoke
 
-            # Audit log
-            await audit_log(tool=tool_name, agent=self.agent_name,
-                           input_hash=input_hash, latency_ms=result_meta["latency_ms"],
-                           was_cached=False)
+        last_error: Optional[Exception] = None
+        for attempt in range(1, RETRY_MAX_ATTEMPTS + 1):
+            try:
+                result = await asyncio.wait_for(
+                    registry_invoke(tool_name, sanitized_params),
+                    timeout=timeout_seconds,
+                )
+                result_meta["result"] = sanitize_output(result)
+                result_meta["success"] = True
+                result_meta["latency_ms"] = int((time.time() - start) * 1000)
+                result_meta["attempts"] = attempt
 
-            _update_tool_health(tool_name, True, result_meta["latency_ms"])
+                # Cache result
+                tool_info = registry_get_tool(tool_name)
+                ttl = tool_info.get("cache_ttl", 3600) if tool_info else 3600
+                await cache_set(f"mcp:{tool_name}:{input_hash}", result, ttl=ttl)
 
-        except asyncio.TimeoutError:
-            result_meta["latency_ms"] = int((time.time() - start) * 1000)
-            result_meta["warnings"].append(f"Tool execution timed out ({timeout_seconds}s)")
-            _update_tool_health(tool_name, False, result_meta["latency_ms"], "timeout")
-            logger.error(f"[SecureMCP:{self.agent_name}] Tool '{tool_name}' timed out")
+                # Audit log
+                await audit_log(tool=tool_name, agent=self.agent_name,
+                               input_hash=input_hash, latency_ms=result_meta["latency_ms"],
+                               was_cached=False)
 
-        except PermissionError as e:
-            result_meta["latency_ms"] = int((time.time() - start) * 1000)
-            result_meta["warnings"].append(f"Permission denied: {e}")
-            _update_tool_health(tool_name, False, result_meta["latency_ms"], str(e))
+                _update_tool_health(tool_name, True, result_meta["latency_ms"])
+                cb.record_success()
+                return result_meta
 
-        except ValueError as e:
-            result_meta["latency_ms"] = int((time.time() - start) * 1000)
-            result_meta["warnings"].append(f"Invalid input: {e}")
-            _update_tool_health(tool_name, False, result_meta["latency_ms"], str(e))
+            except PermissionError as e:
+                result_meta["latency_ms"] = int((time.time() - start) * 1000)
+                result_meta["warnings"].append(f"Permission denied: {e}")
+                _update_tool_health(tool_name, False, result_meta["latency_ms"], str(e))
+                cb.record_failure()
+                return result_meta
 
-        except Exception as e:
-            result_meta["latency_ms"] = int((time.time() - start) * 1000)
-            result_meta["warnings"].append(f"Execution failed: {e}")
-            _update_tool_health(tool_name, False, result_meta["latency_ms"], str(e))
-            logger.error(f"[SecureMCP:{self.agent_name}] Tool '{tool_name}' failed: {e}")
+            except ValueError as e:
+                result_meta["latency_ms"] = int((time.time() - start) * 1000)
+                result_meta["warnings"].append(f"Invalid input: {e}")
+                _update_tool_health(tool_name, False, result_meta["latency_ms"], str(e))
+                cb.record_failure()
+                return result_meta
+
+            except RETRYABLE_EXCEPTIONS as e:
+                last_error = e
+                if attempt < RETRY_MAX_ATTEMPTS:
+                    delay = min(
+                        RETRY_BASE_DELAY * (RETRY_BACKOFF_FACTOR ** (attempt - 1)),
+                        RETRY_MAX_DELAY,
+                    )
+                    logger.warning(
+                        f"[SecureMCP:{self.agent_name}] Tool '{tool_name}' "
+                        f"attempt {attempt}/{RETRY_MAX_ATTEMPTS} failed ({type(e).__name__}), "
+                        f"retrying in {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    result_meta["latency_ms"] = int((time.time() - start) * 1000)
+                    result_meta["warnings"].append(
+                        f"Tool failed after {RETRY_MAX_ATTEMPTS} attempts: {e}"
+                    )
+                    result_meta["attempts"] = attempt
+                    _update_tool_health(tool_name, False, result_meta["latency_ms"], str(e))
+                    cb.record_failure()
+                    logger.error(
+                        f"[SecureMCP:{self.agent_name}] Tool '{tool_name}' "
+                        f"failed after {RETRY_MAX_ATTEMPTS} retries: {e}"
+                    )
+
+            except Exception as e:
+                result_meta["latency_ms"] = int((time.time() - start) * 1000)
+                result_meta["warnings"].append(f"Execution failed: {e}")
+                _update_tool_health(tool_name, False, result_meta["latency_ms"], str(e))
+                cb.record_failure()
+                logger.error(f"[SecureMCP:{self.agent_name}] Tool '{tool_name}' failed: {e}")
+                return result_meta
 
         return result_meta
 

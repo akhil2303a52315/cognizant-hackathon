@@ -7,8 +7,9 @@ import Chat from './pages/Chat'
 import Brand from './pages/Brand'
 import Debate from './pages/Debate'
 import Settings from './pages/Settings'
+import MCPExplorer from './pages/MCPExplorer'
+import RAGExplorer from './pages/RAGExplorer'
 import NotFound from './pages/NotFound'
-import { useSettingsStore } from './store/settingsStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,8 @@ function App() {
             <Route path="/chat" element={<Chat />} />
             <Route path="/debate" element={<Debate />} />
             <Route path="/brand" element={<Brand />} />
+            <Route path="/mcp" element={<MCPExplorer />} />
+            <Route path="/rag" element={<RAGExplorer />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

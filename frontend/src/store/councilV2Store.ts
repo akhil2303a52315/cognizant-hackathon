@@ -1,12 +1,19 @@
 import { create } from 'zustand'
 import type { AgentRoundState, ModeratorResult, SupervisorResult, CouncilV2StreamEvent } from '@/types/council'
 
-const AGENT_KEYS = ['analyst', 'critic', 'creative', 'risk', 'legal', 'market', 'optimizer'] as const
+const AGENT_KEYS = ['risk', 'supply', 'logistics', 'market', 'finance', 'brand'] as const
 type AgentKey = typeof AGENT_KEYS[number]
 
 interface AgentState {
   round1: AgentRoundState
   round2: AgentRoundState
+}
+
+export type PipelineStageKey = 'rag_fetching' | 'api_called' | 'mcp_fetched' | 'sources_ready'
+export interface PipelineStageState {
+  status: 'idle' | 'active' | 'done'
+  detail: string
+  count: number
 }
 
 interface CouncilV2State {
@@ -22,6 +29,8 @@ interface CouncilV2State {
   selectedAgent: string | null
   viewMode: 'agent' | 'moderator' | 'supervisor'
   streamError: string | null
+  citationMaps: Record<string, Record<string, string>>
+  pipelineStages: Record<PipelineStageKey, PipelineStageState>
   handleV2Event: (event: CouncilV2StreamEvent) => void
   setSelectedAgent: (agent: string | null) => void
   setViewMode: (mode: 'agent' | 'moderator' | 'supervisor') => void
@@ -39,6 +48,13 @@ function makeInitialAgents(): Record<string, AgentState> {
     }
   }
   return agents
+}
+
+const STAGE_KEYS: PipelineStageKey[] = ['rag_fetching', 'api_called', 'mcp_fetched', 'sources_ready']
+function makeInitialStages(): Record<PipelineStageKey, PipelineStageState> {
+  return Object.fromEntries(
+    STAGE_KEYS.map((k) => [k, { status: 'idle', detail: '', count: 0 }])
+  ) as Record<PipelineStageKey, PipelineStageState>
 }
 
 function isValidAgent(key: string): key is AgentKey {
@@ -76,6 +92,8 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
   selectedAgent: null,
   viewMode: 'agent',
   streamError: null,
+  citationMaps: {},
+  pipelineStages: makeInitialStages(),
 
   handleV2Event: (event) => {
     switch (event.type) {
@@ -91,9 +109,41 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
           moderatorR1: null,
           moderatorR2: null,
           supervisorResult: null,
-          selectedAgent: 'analyst',
+          selectedAgent: 'risk',
           viewMode: 'agent',
+          citationMaps: {},
+          pipelineStages: makeInitialStages(),
         })
+        break
+
+      case 'pipeline_stage': {
+        const stageKey = (event as any).stage as PipelineStageKey | undefined
+        if (stageKey && STAGE_KEYS.includes(stageKey)) {
+          set((state) => {
+            // Mark previous stages as done, current as active
+            const newStages = { ...state.pipelineStages }
+            const idx = STAGE_KEYS.indexOf(stageKey)
+            STAGE_KEYS.forEach((k, i) => {
+              if (i < idx) newStages[k] = { ...newStages[k], status: 'done' }
+              else if (i === idx) newStages[k] = {
+                status: 'active',
+                detail: (event as any).detail || '',
+                count: (event as any).count || 0,
+              }
+            })
+            return { pipelineStages: newStages }
+          })
+        }
+        break
+      }
+
+      case 'citations_ready':
+        // Mark all stages done
+        set(() => ({
+          pipelineStages: Object.fromEntries(
+            STAGE_KEYS.map((k) => [k, { status: 'done', detail: '', count: 0 }])
+          ) as Record<PipelineStageKey, PipelineStageState>,
+        }))
         break
 
       case 'round_start':
@@ -232,6 +282,8 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       selectedAgent: null,
       viewMode: 'agent',
       streamError: null,
+      citationMaps: {},
+      pipelineStages: makeInitialStages(),
     }),
   setStreaming: (streaming) => set({ isStreaming: streaming }),
   setStreamError: (error) => set({ streamError: error }),

@@ -183,13 +183,13 @@ const PillNav = ({
     const menu = mobileMenuRef.current;
 
     if (hamburger) {
-      const lines = hamburger.querySelectorAll('.hamburger-line');
+      const lines = Array.from(hamburger.querySelectorAll('.hamburger-line')) as Element[];
       if (newState) {
-        gsap.to(lines[0], { rotation: 45, y: 3, duration: 0.3, ease });
-        gsap.to(lines[1], { rotation: -45, y: -3, duration: 0.3, ease });
+        if (lines[0]) gsap.to(lines[0], { rotation: 45, y: 3, duration: 0.3, ease });
+        if (lines[1]) gsap.to(lines[1], { rotation: -45, y: -3, duration: 0.3, ease });
       } else {
-        gsap.to(lines[0], { rotation: 0, y: 0, duration: 0.3, ease });
-        gsap.to(lines[1], { rotation: 0, y: 0, duration: 0.3, ease });
+        if (lines[0]) gsap.to(lines[0], { rotation: 0, y: 0, duration: 0.3, ease });
+        if (lines[1]) gsap.to(lines[1], { rotation: 0, y: 0, duration: 0.3, ease });
       }
     }
 
@@ -252,7 +252,7 @@ const PillNav = ({
           isRouterLink(items?.[0]?.href) ? (
             <Link
               className="pill-logo"
-              to={items[0].href}
+              to={items[0]?.href ?? '/'}
               aria-label="Home"
               onMouseEnter={handleLogoEnter}
               role="menuitem"

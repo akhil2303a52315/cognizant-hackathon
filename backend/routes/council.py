@@ -17,6 +17,20 @@ from backend.observability.langsmith_config import (
 )
 from backend.middleware.security import sanitize_input, redact_pii
 from backend.config import settings
+
+
+_council_compiled: Optional[any] = None
+
+
+def _get_council_compiled():
+    global _council_compiled
+    if _council_compiled is None:
+        graph = build_council_graph()
+        compile_kwargs = {}
+        if settings.human_in_loop:
+            compile_kwargs["interrupt_before"] = ["synthesize"]
+        _council_compiled = graph.compile(**compile_kwargs)
+    return _council_compiled
 import uuid
 import time
 import json
@@ -47,6 +61,8 @@ class CouncilQueryRequest(BaseModel):
     query: str
     context: Optional[dict] = None
     stream: Optional[bool] = False
+    lite: Optional[bool] = None  # Skip Round 2 for faster verdict; None = use config default
+    enable_self_critique: Optional[bool] = None  # Enable self-critique round; None = use config default
 
 
 class FallbackExecuteRequest(BaseModel):
@@ -77,19 +93,51 @@ async def council_query(request: CouncilQueryRequest):
     """
     query = sanitize_input(request.query)
 
+    # Build debate_config from per-request overrides
+    debate_config = {}
+    if request.lite is not None:
+        debate_config["lite"] = request.lite
+    if request.enable_self_critique is not None:
+        debate_config["enable_self_critique"] = request.enable_self_critique
+
+    # Merge debate_config into context
+    ctx = request.context or {}
+    if debate_config:
+        ctx["debate_config"] = debate_config
+
     if request.stream:
-        return await _council_query_stream(query, request.context)
+        return await _council_query_stream(query, ctx)
 
     session_id = str(uuid.uuid4())
     start = time.time()
     tracer = CouncilTracer(session_id)
 
     try:
-        graph = build_council_graph()
-        compile_kwargs = {}
-        if settings.human_in_loop:
-            compile_kwargs["interrupt_before"] = ["synthesize"]
-        compiled = graph.compile(**compile_kwargs)
+        # Check query-based cache for identical queries within TTL
+        import hashlib
+        cache_key = f"council_cache:{hashlib.sha256(query.encode()).hexdigest()}"
+        if debate_config:
+            cache_key += f":{hashlib.sha256(json.dumps(debate_config, sort_keys=True).encode()).hexdigest()[:8]}"
+        try:
+            from backend.db.redis_client import cache_get
+            cached = await cache_get(cache_key)
+            if cached:
+                logger.info(f"Cache hit for query: {query[:60]}...")
+                cached["cached"] = True
+                return CouncilResponse(
+                    session_id=cached.get("session_id", session_id),
+                    recommendation=cached.get("recommendation"),
+                    confidence=cached.get("confidence"),
+                    agent_outputs=cached.get("agent_outputs", []),
+                    evidence=[],
+                    round_number=cached.get("round_number", 0),
+                    status="complete",
+                    latency_ms=0,
+                )
+        except Exception:
+            pass  # Cache unavailable — proceed normally
+
+        compiled = _get_council_compiled()
 
         initial_state = {
             "query": query,
@@ -104,7 +152,7 @@ async def council_query(request: CouncilQueryRequest):
             "round_number": 0,
             "llm_calls_log": [],
             "session_id": session_id,
-            "context": request.context or {},
+            "context": ctx,
             "debate_rounds": [],
             "predictions": [],
             "tiered_fallbacks": [],
@@ -147,6 +195,27 @@ async def council_query(request: CouncilQueryRequest):
             await cache_set(f"council_session:{session_id}", session_data, ttl=_s.session_store_ttl)
         except Exception as e:
             logger.warning(f"Session storage failed: {e}")
+
+        # Store in query-based cache for duplicate query avoidance
+        try:
+            from backend.db.redis_client import cache_set as _cache_set
+            from backend.config import settings as _s
+            cache_data = {
+                "session_id": session_id,
+                "recommendation": result.get("recommendation", ""),
+                "confidence": result.get("confidence", 0),
+                "risk_score": result.get("risk_score", 0),
+                "agent_outputs": [
+                    {"agent": o.agent, "confidence": o.confidence, "contribution": o.contribution[:300]}
+                    for o in result.get("agent_outputs", [])
+                ],
+                "round_number": result.get("round_number", 0),
+                "tiered_fallbacks": result.get("tiered_fallbacks", []),
+                "predictions": result.get("predictions", []),
+            }
+            await _cache_set(cache_key, cache_data, ttl=_s.council_cache_ttl)
+        except Exception:
+            pass  # Cache write failure is non-critical
 
         trace_url = tracer.get_trace_url()
 
@@ -244,6 +313,98 @@ async def council_history(limit: int = 20, offset: int = 0):
 
 
 # ---------------------------------------------------------------------------
+# GET /council/session/{session_id} — retrieve a specific session
+# ---------------------------------------------------------------------------
+@router.get("/session/{session_id}")
+async def council_session(session_id: str):
+    """Return a specific council session by ID from Redis."""
+    try:
+        from backend.db.redis_client import get_redis
+        r = await get_redis()
+        data = await r.get(f"council_session:{session_id}")
+        if not data:
+            raise HTTPException(404, f"Session '{session_id}' not found")
+        import json as _json
+        session = _json.loads(data)
+        return {"success": True, "data": session, "error": None}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Council session lookup failed: {e}")
+        return {"success": False, "data": None, "error": f"Session lookup failed: {e}"}
+
+
+# ---------------------------------------------------------------------------
+# GET/PUT /council/config — modular debate configuration at runtime
+# ---------------------------------------------------------------------------
+class CouncilConfigRequest(BaseModel):
+    max_debate_rounds: Optional[int] = None
+    confidence_gap_threshold: Optional[float] = None
+    council_lite_mode: Optional[bool] = None
+    enable_self_critique: Optional[bool] = None
+    human_in_loop: Optional[bool] = None
+    council_cache_ttl: Optional[int] = None
+
+
+@router.get("/config")
+async def get_council_config():
+    """Return current council/debate configuration from settings."""
+    return {
+        "success": True,
+        "data": {
+            "max_debate_rounds": settings.max_debate_rounds,
+            "confidence_gap_threshold": settings.confidence_gap_threshold,
+            "council_lite_mode": settings.council_lite_mode,
+            "enable_self_critique": settings.enable_self_critique,
+            "human_in_loop": settings.human_in_loop,
+            "council_cache_ttl": settings.council_cache_ttl,
+        },
+        "error": None,
+    }
+
+
+@router.put("/config")
+async def update_council_config(request: CouncilConfigRequest):
+    """Update council/debate configuration at runtime (in-memory only, not persisted).
+
+    This allows toggling lite mode, self-critique, human-in-loop, etc.
+    without restarting the server.
+    """
+    updates = request.model_dump(exclude_none=True)
+    if not updates:
+        return {"success": False, "data": None, "error": "No configuration values provided"}
+
+    applied = {}
+    for key, value in updates.items():
+        if hasattr(settings, key):
+            setattr(settings, key, value)
+            applied[key] = value
+        else:
+            logger.warning(f"Unknown config key: {key}")
+
+    logger.info(f"Council config updated: {applied}")
+
+    # Re-initialize debate engine singleton with new settings
+    try:
+        from backend.debate_engine import DebateEngine
+        import backend.debate_engine as de_mod
+        de_mod.debate_engine = DebateEngine(
+            max_rounds=settings.max_debate_rounds,
+            consensus_threshold=settings.confidence_gap_threshold,
+            lite_mode=settings.council_lite_mode,
+            enable_self_critique=settings.enable_self_critique,
+        )
+    except Exception as e:
+        logger.warning(f"Debate engine re-init after config update failed: {e}")
+
+    return {
+        "success": True,
+        "data": {"updated": applied},
+        "error": None,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Day 6: POST /council/execute-fallback — one-click fallback via MCP
 # ---------------------------------------------------------------------------
 @router.post("/execute-fallback")
@@ -328,8 +489,7 @@ async def council_analyze(request: CouncilRequest):
     start = time.time()
 
     try:
-        graph = build_council_graph()
-        compiled = graph.compile()
+        compiled = _get_council_compiled()
 
         initial_state = {
             "query": request.query,

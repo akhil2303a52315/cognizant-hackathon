@@ -222,12 +222,13 @@ async def oecd_data(params: dict) -> dict:
             url += f"/{filter_str}"
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params={"contentType": "csv"})
-            text = resp.text[:2000]
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
 
-        return {"dataset": dataset, "data_preview": text[:500], "mock": False}
+        return {"dataset": dataset, "data": data, "mock": False}
     except Exception:
-        return {"dataset": dataset, "data_preview": "", "mock": True}
+        return {"dataset": dataset, "data": {}, "mock": True}
 
 
 TOOLS = [

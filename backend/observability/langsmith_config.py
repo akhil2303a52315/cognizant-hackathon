@@ -314,19 +314,34 @@ def generate_prometheus_metrics() -> str:
 
     # Counters
     for key, value in snap["counters"].items():
-        lines.append(f"council_{key.split('{')[0]} {value}")
+        metric_name = key.split('{')[0]
+        lines.append(f"# HELP council_{metric_name} Cumulative counter for {metric_name}")
+        lines.append(f"# TYPE council_{metric_name} counter")
+        lines.append(f"council_{key} {value}")
     # Gauges
     for key, value in snap["gauges"].items():
-        lines.append(f"council_{key.split('{')[0]} {value}")
+        metric_name = key.split('{')[0]
+        lines.append(f"# HELP council_{metric_name} Current gauge for {metric_name}")
+        lines.append(f"# TYPE council_{metric_name} gauge")
+        lines.append(f"council_{key} {value}")
     # Histograms (summary style)
     for key, summary in snap["histograms"].items():
-        metric_name = f"council_{key.split('{')[0]}"
-        lines.append(f'{metric_name}_count {summary["count"]}')
-        lines.append(f'{metric_name}_sum {summary["sum"]:.2f}')
+        metric_name = key.split('{')[0]
+        lines.append(f"# HELP council_{metric_name} Latency summary for {metric_name}")
+        lines.append(f"# TYPE council_{metric_name} summary")
+        lines.append(f'council_{metric_name}_count {summary["count"]}')
+        lines.append(f'council_{metric_name}_sum {summary["sum"]:.2f}')
+        lines.append(f'council_{metric_name}{{quantile="0.5"}} {summary["p50"]:.2f}')
+        lines.append(f'council_{metric_name}{{quantile="0.95"}} {summary["p95"]:.2f}')
+        lines.append(f'council_{metric_name}{{quantile="0.99"}} {summary["p99"]:.2f}')
 
-    # Add static info
+    # Static info
+    lines.append(f'# HELP council_info Build info')
+    lines.append(f'# TYPE council_info gauge')
     lines.append(f'council_info{{version="{settings.version}"}} 1')
-    lines.append(f'council_agents_total 7')
+    lines.append(f'# HELP council_agents_total Number of domain agents')
+    lines.append(f'# TYPE council_agents_total gauge')
+    lines.append(f'council_agents_total 6')
 
     return "\n".join(lines) + "\n"
 

@@ -47,32 +47,31 @@ async def monte_carlo_disruption(
     Returns:
         Prediction with point estimate and 95% CI
     """
-    # Adjust base probability with historical data if available
+    import asyncio
+
     if historical_disruptions:
         n_events = len(historical_disruptions)
-        # More historical events → higher base probability
         base_probability = min(base_probability + 0.02 * n_events, 0.95)
 
-    results = []
-    dt = 1.0 / 252  # daily step (252 trading days)
+    def _run_simulation() -> list[float]:
+        results = []
+        dt = 1.0 / 252
+        for _ in range(simulations):
+            prob = base_probability
+            for day in range(horizon_days):
+                drift = 0.0
+                diffusion = volatility * math.sqrt(dt) * random.gauss(0, 1)
+                jump = 0.0
+                if random.random() < 0.01:
+                    jump = random.gauss(0, 0.1)
+                prob = prob * math.exp(drift + diffusion + jump)
+                prob = max(0.0, min(1.0, prob))
+            results.append(prob)
+        results.sort()
+        return results
 
-    for _ in range(simulations):
-        prob = base_probability
-        for day in range(horizon_days):
-            # Geometric Brownian motion step
-            drift = 0.0
-            diffusion = volatility * math.sqrt(dt) * random.gauss(0, 1)
-            # Jump component (Poisson process for disruption events)
-            jump = 0.0
-            if random.random() < 0.01:  # 1% daily jump probability
-                jump = random.gauss(0, 0.1)
-
-            prob = prob * math.exp(drift + diffusion + jump)
-            prob = max(0.0, min(1.0, prob))
-
-        results.append(prob)
-
-    results.sort()
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(None, _run_simulation)
     n = len(results)
     point = results[n // 2]
     ci_lower = results[int(n * 0.025)]

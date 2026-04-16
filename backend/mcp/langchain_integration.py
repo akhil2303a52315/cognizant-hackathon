@@ -26,7 +26,14 @@ def _sync_wrapper(tool_name: str):
             params = json.loads(query) if query.startswith("{") else {"query": query}
         except json.JSONDecodeError:
             params = {"query": query}
-        return asyncio.get_event_loop().run_until_complete(invoke_tool(tool_name, params))
+        try:
+            loop = asyncio.get_event_loop()
+            result = loop.run_until_complete(invoke_tool(tool_name, params))
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(invoke_tool(tool_name, params))
+        return json.dumps(result, default=str)
     return run
 
 

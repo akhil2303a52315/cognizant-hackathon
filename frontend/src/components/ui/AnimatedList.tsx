@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback, ReactNode } from 'react';
-import { motion, useInView } from 'motion/react';
+import { motion, useInView } from 'framer-motion';
 import './AnimatedList.css';
 
 interface AnimatedItemProps {
@@ -12,7 +12,7 @@ interface AnimatedItemProps {
 
 const AnimatedItem = ({ children, delay = 0, index, onMouseEnter, onClick }: AnimatedItemProps) => {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { amount: 0.5, triggerOnce: false });
+  const inView = useInView(ref, { amount: 0.5, once: false });
   return (
     <motion.div
       ref={ref}

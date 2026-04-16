@@ -261,6 +261,7 @@ class AgenticRAG(BaseRAG):
         loops_used = 0
         escalated = False
         current_query = query
+        graded = []
 
         for loop in range(MAX_RETRIEVAL_LOOPS + 1):
             loops_used = loop + 1

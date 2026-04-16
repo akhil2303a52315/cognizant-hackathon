@@ -1,3 +1,11 @@
+export interface MCPToolHealth {
+  calls: number
+  success_rate: number
+  avg_latency_ms: number
+  last_error: string | null
+  last_success: string | null
+}
+
 export interface MCPTool {
   name: string
   description: string
@@ -8,6 +16,8 @@ export interface MCPTool {
   }
   category: string
   cache_ttl?: number
+  allowed_agents?: string[]
+  health?: MCPToolHealth
 }
 
 export interface MCPProperty {

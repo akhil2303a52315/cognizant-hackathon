@@ -1,24 +1,25 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Shield, MessageSquare, Eye, Settings, Wifi, WifiOff, Menu, X, Activity, Zap } from 'lucide-react'
+import { Shield, MessageSquare, Eye, Settings, Wifi, WifiOff, Menu, X, Activity, Zap, Wrench, BookOpen } from 'lucide-react'
 import { healthApi } from '@/lib/api'
 import Dock from '@/components/ui/Dock'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Shield },
   { path: '/chat', label: 'Council Chat', icon: MessageSquare },
+  { path: '/mcp', label: 'MCP Explorer', icon: Wrench },
+  { path: '/rag', label: 'RAG Explorer', icon: BookOpen },
   { path: '/brand', label: 'Brand Intel', icon: Eye },
   { path: '/settings', label: 'Settings', icon: Settings },
 ]
 
 const AGENT_COLORS = [
-  { name: 'Analyst', hex: '#3B82F6' },
-  { name: 'Critic', hex: '#EF4444' },
-  { name: 'Creative', hex: '#A855F7' },
-  { name: 'Risk', hex: '#F97316' },
-  { name: 'Legal', hex: '#22C55E' },
-  { name: 'Market', hex: '#EC4899' },
-  { name: 'Optimizer', hex: '#06B6D4' },
+  { name: 'Risk Sentinel', hex: '#EF4444' },
+  { name: 'Supply Optimizer', hex: '#7C3AED' },
+  { name: 'Logistics Navigator', hex: '#06B6D4' },
+  { name: 'Market Intelligence', hex: '#F97316' },
+  { name: 'Finance Guardian', hex: '#059669' },
+  { name: 'Brand Protector', hex: '#EC4899' },
 ]
 
 export default function Navbar() {
@@ -97,7 +98,7 @@ export default function Navbar() {
                     title={agent.name}
                   />
                 ))}
-                <span className="ml-1.5 text-[10px] font-bold font-heading text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">7/7</span>
+                <span className="ml-1.5 text-[10px] font-bold font-heading text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">6/6</span>
               </div>
 
               {/* Server Status */}

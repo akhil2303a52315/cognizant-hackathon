@@ -31,6 +31,21 @@ logger = logging.getLogger(__name__)
 
 MAX_DEBATE_ROUNDS = 3
 CONSENSUS_THRESHOLD = 15.0  # max confidence gap for consensus
+SELF_CRITIQUE_PROMPT_TEMPLATE = """You are the {agent_name} agent reviewing your own analysis.
+
+Your original analysis:
+{own_contribution}
+
+Critically examine your own position:
+1. What assumptions might be wrong?
+2. What data gaps exist in your analysis?
+3. What alternative interpretations could exist?
+4. How could your confidence level change with better data?
+5. Your revised confidence (0-100) after self-critique
+
+Be honest and rigorous. Self-awareness improves the council's decision quality.
+"""
+
 CHALLENGE_PROMPT_TEMPLATE = """You are the {challenger_agent} agent challenging the {target_agent} agent's position.
 
 {target_agent}'s position:
@@ -39,9 +54,13 @@ CHALLENGE_PROMPT_TEMPLATE = """You are the {challenger_agent} agent challenging 
 Your original position:
 {challenger_contribution}
 
+Your self-critique findings:
+{challenger_self_critique}
+
 Challenge their key assumptions, data sources, or risk assessments. Be specific.
 If you agree with parts of their analysis, acknowledge those points.
 Ground your challenge in the retrieved context and MCP data provided.
+Incorporate your self-critique to strengthen your challenge.
 
 Respond with:
 1. Points of agreement
@@ -76,10 +95,24 @@ class DebateEngine:
     Each round produces a DebateRound with structured output.
     The engine tracks confidence convergence and stops early if
     agents reach consensus (gap < CONSENSUS_THRESHOLD).
+
+    Features:
+      - Self-critique: agents review their own analysis before challenging others
+      - Lite mode: skip Round 2 for faster verdicts
+      - Configurable rounds, consensus threshold, and self-critique toggle
     """
 
-    def __init__(self, max_rounds: int = MAX_DEBATE_ROUNDS):
+    def __init__(
+        self,
+        max_rounds: int = MAX_DEBATE_ROUNDS,
+        consensus_threshold: float = CONSENSUS_THRESHOLD,
+        lite_mode: bool = False,
+        enable_self_critique: bool = True,
+    ):
         self.max_rounds = max_rounds
+        self.consensus_threshold = consensus_threshold
+        self.lite_mode = lite_mode
+        self.enable_self_critique = enable_self_critique
 
     async def run_debate(self, state: CouncilState) -> dict:
         """Execute the full debate cycle and return state updates.
@@ -120,14 +153,29 @@ class DebateEngine:
         all_rounds.append(round1)
 
         # Check if consensus already reached
-        if round1["round_confidence"] >= (100 - CONSENSUS_THRESHOLD):
+        if round1["round_confidence"] >= (100 - self.consensus_threshold):
             logger.info("Consensus reached after Round 1 — skipping further rounds")
+            return await self._finalize(all_rounds, current_outputs, query, state, tracer)
+
+        # Self-critique: agents review their own analysis before challenging others
+        self_critiques = {}
+        if self.enable_self_critique:
+            t0 = _time.monotonic()
+            with tracer.trace_debate_round(1, phase="self_critique"):
+                self_critiques = await self._round_self_critique(current_outputs, query, context)
+            latency_sc = (_time.monotonic() - t0) * 1000
+            record_debate_round(session_id, 1, "self_critique", round1["round_confidence"], 0, latency_sc)
+            logger.info(f"Self-critique complete for {len(self_critiques)} agents")
+
+        # Lite mode: skip Round 2 (challenge phase) for faster verdict
+        if self.lite_mode:
+            logger.info("Lite mode enabled — skipping Round 2 challenge phase")
             return await self._finalize(all_rounds, current_outputs, query, state, tracer)
 
         # Round 2: Challenge & Counter
         t0 = _time.monotonic()
         with tracer.trace_debate_round(2, phase="challenge"):
-            round2 = await self._round_challenge(current_outputs, query, context)
+            round2 = await self._round_challenge(current_outputs, query, context, self_critiques)
         latency2 = (_time.monotonic() - t0) * 1000
         record_debate_round(session_id, 2, "challenge", round2["round_confidence"], 0, latency2)
         all_rounds.append(round2)
@@ -135,7 +183,7 @@ class DebateEngine:
         # Update outputs with challenged positions
         current_outputs = self._merge_challenge_results(current_outputs, round2)
 
-        if round2["round_confidence"] >= (100 - CONSENSUS_THRESHOLD):
+        if round2["round_confidence"] >= (100 - self.consensus_threshold):
             logger.info("Consensus reached after Round 2 — skipping Round 3")
             return await self._finalize(all_rounds, current_outputs, query, state, tracer)
 
@@ -179,11 +227,63 @@ class DebateEngine:
         ).model_dump()
 
     # -----------------------------------------------------------------------
+    # Self-Critique Round (between Round 1 and Round 2)
+    # -----------------------------------------------------------------------
+    async def _round_self_critique(self, outputs: list[AgentOutput], query: str, context: dict) -> dict[str, str]:
+        """Each agent critiques its own analysis before challenging others.
+
+        Returns dict mapping agent name -> self-critique text.
+        """
+        critiques = {}
+        import asyncio
+
+        async def _critique_one(agent_output: AgentOutput) -> tuple[str, str]:
+            rag_ctx = ""
+            mcp_ctx = ""
+            if context:
+                rag_contexts = context.get("rag_contexts") or {}
+                mcp_contexts = context.get("mcp_contexts") or {}
+                rag_ctx = rag_contexts.get(agent_output.agent, "")
+                mcp_ctx = mcp_contexts.get(agent_output.agent, "")
+
+            prompt = SELF_CRITIQUE_PROMPT_TEMPLATE.format(
+                agent_name=agent_output.agent.upper(),
+                own_contribution=agent_output.contribution[:1000],
+            )
+
+            context_section = ""
+            if rag_ctx:
+                context_section += f"\n\nRetrieved Context:\n{rag_ctx[:1000]}"
+            if mcp_ctx:
+                context_section += f"\n\nMCP Data:\n{mcp_ctx[:1000]}"
+
+            messages = [
+                {"role": "system", "content": prompt + context_section},
+                {"role": "user", "content": f"Critique your own analysis of: {query}"},
+            ]
+
+            try:
+                response, model_used = await llm_router.invoke_with_fallback(agent_output.agent, messages)
+                return (agent_output.agent, response.content)
+            except Exception as e:
+                logger.warning(f"Self-critique for {agent_output.agent} failed: {e}")
+                return (agent_output.agent, f"Self-critique unavailable: {e}")
+
+        # Run all self-critiques in parallel
+        results = await asyncio.gather(*[_critique_one(o) for o in outputs])
+        for agent_name, critique_text in results:
+            critiques[agent_name] = critique_text
+
+        return critiques
+
+    # -----------------------------------------------------------------------
     # Round 2: Challenge & Counter
     # -----------------------------------------------------------------------
-    async def _round_challenge(self, outputs: list[AgentOutput], query: str, context: dict) -> dict:
+    async def _round_challenge(self, outputs: list[AgentOutput], query: str, context: dict, self_critiques: dict[str, str] | None = None) -> dict:
         """Each agent challenges the most conflicting other agent."""
         challenges = []
+        if self_critiques is None:
+            self_critiques = {}
 
         for i, challenger in enumerate(outputs):
             # Find the most conflicting agent (largest confidence gap)
@@ -200,11 +300,13 @@ class DebateEngine:
                 rag_ctx = rag_contexts.get(challenger.agent, "")
                 mcp_ctx = mcp_contexts.get(challenger.agent, "")
 
+            critique_text = self_critiques.get(challenger.agent, "No self-critique available.")
             prompt = CHALLENGE_PROMPT_TEMPLATE.format(
                 challenger_agent=challenger.agent.upper(),
                 target_agent=target.agent.upper(),
                 target_contribution=target.contribution[:800],
                 challenger_contribution=challenger.contribution[:800],
+                challenger_self_critique=critique_text[:600],
             )
 
             context_section = ""
@@ -352,7 +454,11 @@ class DebateEngine:
     # Helper methods
     # -----------------------------------------------------------------------
     def _find_challenge_target(self, challenger: AgentOutput, all_outputs: list[AgentOutput]) -> Optional[AgentOutput]:
-        """Find the agent whose confidence differs most from the challenger."""
+        """Find the agent whose confidence differs most from the challenger.
+
+        If all agents have the same confidence, pick the next agent in the list
+        to ensure a challenge always occurs.
+        """
         best_target = None
         max_gap = 0
 
@@ -363,6 +469,12 @@ class DebateEngine:
             if gap > max_gap:
                 max_gap = gap
                 best_target = o
+
+        # If all agents have same confidence, pick the next agent for a challenge
+        if best_target is None:
+            for o in all_outputs:
+                if o.agent != challenger.agent:
+                    return o
 
         return best_target
 
@@ -410,27 +522,58 @@ class DebateEngine:
 
         try:
             response, _ = await llm_router.invoke_with_fallback("moderator", messages)
-            parsed = json.loads(response.content)
-            return parsed.get("disagreements", []), parsed.get("consensus", [])
-        except Exception:
-            # Fallback: simple heuristic
-            confidences = [o.confidence for o in outputs]
-            gap = max(confidences) - min(confidences) if confidences else 0
-            disagreements = [f"Confidence gap of {gap:.0f}% between agents"] if gap > 20 else []
-            consensus = ["All agents agree action is needed"] if gap <= 20 else []
-            return disagreements, consensus
+            content = response.content
+            # Try to parse JSON — handle markdown code block wrapping
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                return parsed.get("disagreements", []), parsed.get("consensus", [])
+            # No JSON found — fall through to heuristic
+        except Exception as e:
+            logger.warning(f"Position extraction LLM call failed: {e}")
+
+        # Fallback: simple heuristic based on confidence spread
+        confidences = [o.confidence for o in outputs]
+        gap = max(confidences) - min(confidences) if confidences else 0
+        disagreements = [f"Confidence gap of {gap:.0f}% between agents"] if gap > 20 else []
+        consensus = ["All agents agree action is needed"] if gap <= 20 else []
+        return disagreements, consensus
 
     async def _extract_positions_from_challenges(self, challenges: list[dict], query: str) -> tuple[list[str], list[str]]:
-        """Extract positions from challenge round results."""
+        """Extract positions from challenge round results using LLM."""
+        if not challenges:
+            return [], []
+
+        challenge_summaries = "\n".join([
+            f"- {c.get('agent', '?')} challenges {c.get('challenged', '?')}: {c.get('challenge', '')[:300]}"
+            for c in challenges
+        ])
+
+        messages = [
+            {"role": "system", "content": "Extract key disagreements and consensus from these challenge results. Return JSON: {\"disagreements\": [...], \"consensus\": [...] }"},
+            {"role": "user", "content": f"Query: {query}\n\nChallenges:\n{challenge_summaries}"},
+        ]
+
+        try:
+            response, _ = await llm_router.invoke_with_fallback("moderator", messages)
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', response.content)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                return parsed.get("disagreements", [])[:5], parsed.get("consensus", [])[:5]
+        except Exception as e:
+            logger.warning(f"Challenge position extraction failed: {e}")
+
+        # Fallback: keyword matching
         disagreements = []
         consensus = []
-
         for c in challenges:
             challenge_text = c.get("challenge", "")
             if "disagree" in challenge_text.lower() or "challenge" in challenge_text.lower():
-                disagreements.append(f"{c['agent']} challenges {c['challenged']}")
+                disagreements.append(f"{c.get('agent', '?')} challenges {c.get('challenged', '?')}")
             if "agree" in challenge_text.lower():
-                consensus.append(f"{c['agent']} agrees with {c['challenged']}")
+                consensus.append(f"{c.get('agent', '?')} agrees with {c.get('challenged', '?')}")
 
         return disagreements[:5], consensus[:5]
 
@@ -505,6 +648,15 @@ class _null_ctx:
 
 
 # ---------------------------------------------------------------------------
-# Singleton instance
+# Singleton instance — configured from application settings
 # ---------------------------------------------------------------------------
-debate_engine = DebateEngine()
+try:
+    from backend.config import settings as _settings
+    debate_engine = DebateEngine(
+        max_rounds=_settings.max_debate_rounds,
+        consensus_threshold=_settings.confidence_gap_threshold,
+        lite_mode=getattr(_settings, "council_lite_mode", False),
+        enable_self_critique=getattr(_settings, "enable_self_critique", True),
+    )
+except Exception:
+    debate_engine = DebateEngine()

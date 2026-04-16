@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  ShieldAlert, GitBranch, Navigation, TrendingUp, DollarSign,
-  Megaphone, Crown, RotateCcw, CheckCircle2, Lock, Users, 
+  Crown, RotateCcw, Users, 
   Zap, BarChart3, MessageSquare, ArrowRight, StopCircle
 } from "lucide-react"
-import { useCouncilStore } from '@/store/councilStore'
-import { useCouncilStream } from '@/hooks/useCouncilStream'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useCouncilV2Store } from '@/store/councilV2Store'
+import { useCouncilV2Stream } from '@/hooks/useCouncilV2Stream'
 import { AGENTS_CONFIG } from '@/config/agents.config'
+import { COUNCIL_AGENTS } from '@/types/council'
 import AgentCard from '@/components/shared/AgentCard'
 import RoundTab from '@/components/shared/RoundTab'
 import ModelBadge from '@/components/shared/ModelBadge'
@@ -40,39 +39,30 @@ const ROUND_CONFIG = [
 ]
 
 export default function Debate() {
-  const store = useCouncilStore()
+  const store = useCouncilV2Store()
   const { 
-    queryInput, setQueryInput, 
-    activeRound, setActiveRound,
-    completedRounds, setCompletedRounds,
-    roundsUnlocked, setRoundsUnlocked,
-    setJustUnlocked,
-    agentOutputs, agentConfidence,
-    selectedAgents, setSelectedAgents,
-    reset, councilRunning, isStreaming
+    currentRound, agents, moderatorR1, moderatorR2,
+    supervisorResult, viewMode,
+    isStreaming, reset
   } = store
 
-  const { startStream, stopStream } = useCouncilStream()
-  const socket = useWebSocket('council')
+  const { startStream, stopStream } = useCouncilV2Stream()
+  const [queryInput, setQueryInput] = useState('')
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([])
+  const [activeRound, setActiveRound] = useState(currentRound || 1)
+  const completedRounds: number[] = []
+  if (moderatorR1) completedRounds.push(1)
+  if (moderatorR2) completedRounds.push(2)
+  if (supervisorResult) completedRounds.push(3)
 
-  useEffect(() => {
-    const unsub = socket.on('round_complete', (data: any) => {
-      const round = data.payload?.round || data.round
-      if (round) {
-        setCompletedRounds(prev => Array.from(new Set([...prev, round])))
-        setRoundsUnlocked(prev => Array.from(new Set([...prev, round + 1])))
-        setJustUnlocked(round + 1)
-        setTimeout(() => setJustUnlocked(null), 2000)
-        
-        // Auto-navigate to next round
-        if (round < 3) {
-          setActiveRound(round + 1)
-          toast('info', `🔓 Round ${round + 1} Unlocked — Agents are ready to debate`)
-        }
-      }
-    })
-    return unsub
-  }, [socket, setCompletedRounds, setRoundsUnlocked, setJustUnlocked, setActiveRound])
+  // Build agentConfidence map from store agents
+  const agentConfidence: Record<string, number> = {}
+  const agentOutputs: Record<string, string> = {}
+  for (const [key, state] of Object.entries(agents)) {
+    const roundKey = activeRound <= 1 ? 'round1' : 'round2'
+    agentConfidence[key] = state[roundKey].confidence
+    agentOutputs[key] = state[roundKey].output
+  }
 
   const handleQuerySubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -134,7 +124,7 @@ export default function Debate() {
         {/* CHAT CONTENT */}
         <div className="flex-1 overflow-y-auto px-8 py-8 scrollbar-thin scrollbar-thumb-white/10">
           <AnimatePresence mode="wait">
-            {!councilRunning && completedRounds.length === 0 ? (
+            {!isStreaming && completedRounds.length === 0 ? (
               <motion.div 
                 key="initial-state"
                 initial={{ opacity: 0, y: 20 }}
@@ -147,7 +137,7 @@ export default function Debate() {
                 </div>
                 <h2 className="text-3xl font-bold font-poppins mb-4 text-gradient-indigo">Activate the Council</h2>
                 <p className="text-white/50 leading-relaxed mb-10">
-                  Ask a complex supply chain question. Seven specialized experts will analyze, debate, and synthesize a data-driven path forward.
+                  Ask a complex supply chain question. Six specialized experts will analyze, debate, and synthesize a data-driven path forward.
                 </p>
                 
                 <form onSubmit={handleQuerySubmit} className="relative group">
@@ -155,7 +145,7 @@ export default function Debate() {
                     type="text"
                     value={queryInput}
                     onChange={(e) => setQueryInput(e.target.value)}
-                    placeholder="e.target.value = 'Analyze the impact of Red Sea disruptions on electronics OEMs...'"
+                    placeholder="Analyze the impact of Red Sea disruptions on electronics OEMs..."
                     className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-5 pr-16 text-lg focus:outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
                   />
                   <button 
@@ -175,57 +165,64 @@ export default function Debate() {
               >
                 {/* AGENT OUTPUTS FOR CURRENT ROUND */}
                 <div className="grid grid-cols-1 gap-6">
-                  {Object.entries(agentOutputs).map(([agentId, content]) => {
-                    const config = AGENTS_CONFIG.find(a => a.id === agentId)
+                  {COUNCIL_AGENTS.map((agentInfo) => {
+                    const agentState = agents[agentInfo.key]
+                    if (!agentState) return null
+                    const roundKey = activeRound <= 1 ? 'round1' : 'round2'
+                    const roundState = agentState?.[roundKey]
+                    if (!roundState) return null
+                    const content = roundState.output
+                    if (!content && roundState.status === 'idle') return null
+                    const config = AGENTS_CONFIG.find(a => a.id === agentInfo.key)
                     if (!config) return null
                     
                     return (
                       <motion.div
                         layout
-                        key={agentId}
+                        key={agentInfo.key}
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         className="glass-premium p-8 rounded-[2rem] relative overflow-hidden group"
                         style={{ 
-                          borderColor: `${config.accentColor}30`,
+                          borderColor: `${agentInfo.hexColor}30`,
                         }}
                       >
                          {/* TOP ACCENT BLOOM */}
                          <div className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-[80px] opacity-10 transition-opacity group-hover:opacity-20"
-                              style={{ backgroundColor: config.accentColor }} />
+                              style={{ backgroundColor: agentInfo.hexColor }} />
                          
                          <div className="relative z-10">
                            <div className="flex items-start justify-between mb-8">
                              <div className="flex items-center gap-4">
                                <div className="w-14 h-14 rounded-2xl flex items-center justify-center border border-white/10 shadow-lg shadow-black/20"
                                     style={{ 
-                                      background: `linear-gradient(135deg, ${config.accentColor}30 0%, ${config.accentColor}10 100%)`,
-                                      borderColor: `${config.accentColor}40`
+                                      background: `linear-gradient(135deg, ${agentInfo.hexColor}30 0%, ${agentInfo.hexColor}10 100%)`,
+                                      borderColor: `${agentInfo.hexColor}40`
                                     }}>
                                  <span className="text-2xl drop-shadow-md">{config.emoji}</span>
                                </div>
                                <div>
                                  <h3 className="font-extrabold font-outfit text-2xl tracking-tight text-white mb-0.5">
-                                   {config.name}
+                                   {agentInfo.label}
                                  </h3>
                                  <div className="flex items-center gap-2">
                                    <span className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-bold">
-                                     Round {activeRound} • Status: Complete
+                                     Round {activeRound} • {roundState.status === 'thinking' ? 'Processing...' : roundState.status === 'done' ? 'Complete' : roundState.status}
                                    </span>
                                    <div className="w-1 h-1 rounded-full bg-white/20" />
-                                   <span className="text-[10px] font-bold" style={{ color: config.accentColor }}>
-                                      {config.role.split('+')[0].trim()}
+                                   <span className="text-[10px] font-bold" style={{ color: agentInfo.hexColor }}>
+                                      {config.role.split('+')[0]?.trim() ?? config.role}
                                    </span>
                                  </div>
                                </div>
                              </div>
 
                              <div className="flex flex-col items-end gap-2">
-                                {agentConfidence[agentId] && (
+                                {roundState.confidence > 0 && (
                                   <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2 backdrop-blur-md">
-                                    <div className="w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.5)]" style={{ backgroundColor: config.accentColor }} />
-                                    <span className="text-xs font-black font-outfit" style={{ color: config.accentColor }}>
-                                      {agentConfidence[agentId]}%
+                                    <div className="w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.5)]" style={{ backgroundColor: agentInfo.hexColor }} />
+                                    <span className="text-xs font-black font-outfit" style={{ color: agentInfo.hexColor }}>
+                                      {roundState.confidence}%
                                     </span>
                                   </div>
                                 )}
@@ -254,6 +251,31 @@ export default function Debate() {
                     )
                   })}
                 </div>
+
+                {/* SUPERVISOR VERDICT */}
+                {supervisorResult && viewMode === 'supervisor' && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="glass-premium p-8 rounded-[2rem] border-emerald-500/30 relative overflow-hidden"
+                  >
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center">
+                        <Crown className="w-6 h-6 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-xl text-white">Supervisor — Final Verdict</h3>
+                        <span className="text-[10px] text-emerald-400/60 uppercase tracking-widest">Round 3</span>
+                      </div>
+                      <div className="ml-auto px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                        <span className="text-sm font-black text-emerald-400">{supervisorResult.confidence}%</span>
+                      </div>
+                    </div>
+                    <div className="prose prose-invert max-w-none text-white/80">
+                      <MarkdownRenderer content={supervisorResult.output} />
+                    </div>
+                  </motion.div>
+                )}
 
                 {/* FINAL RECOMMENDATION / RESET BUTTON */}
                 {isRound3Complete && (
@@ -321,7 +343,7 @@ export default function Debate() {
             </h2>
           </div>
           <p className="text-[11px] text-white/35 font-medium tracking-wide pl-9 font-inter">
-            7 Specialized AI Experts • Select to focus
+            6 Specialized AI Experts • Select to focus
           </p>
 
           <div className="flex items-center gap-2 mt-2.5 pl-9">
@@ -370,7 +392,7 @@ export default function Debate() {
         {/* AGENT LIST */}
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-indigo-500/30">
           <AnimatePresence mode="popLayout">
-            {AGENTS_CONFIG.map(agent => (
+                {AGENTS_CONFIG.filter(a => a.id !== 'moderator').map(agent => (
               <AgentCard
                 key={agent.id}
                 agent={agent}

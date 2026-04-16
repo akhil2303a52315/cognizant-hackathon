@@ -7,7 +7,7 @@ from backend.agents.logistics_agent import logistics_agent
 from backend.agents.market_agent import market_agent
 from backend.agents.finance_agent import finance_agent
 from backend.agents.brand_agent import brand_agent
-from backend.agents.supervisor import should_debate
+from backend.graph_utils import node_error_handler
 import logging
 import json
 import time
@@ -18,27 +18,55 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Dynamic Agent Routing node
+# ---------------------------------------------------------------------------
+@node_error_handler(fallback={"context": {}})
+async def dynamic_routing_node(state: CouncilState) -> dict:
+    """Determine which agents to activate based on query content.
+
+    Uses keyword scoring + optional LLM classification to select
+    the most relevant agents, reducing unnecessary LLM calls.
+
+    Stores selected agents in context.active_agents for the graph
+    to use in conditional edges.
+    """
+    query = state.get("query", "")
+    ctx = state.get("context") or {}
+
+    # Check if caller explicitly specified agents
+    explicit_agents = ctx.get("active_agents")
+    if explicit_agents and isinstance(explicit_agents, list):
+        logger.info(f"Using explicitly specified agents: {explicit_agents}")
+        return {"context": {**ctx, "active_agents": explicit_agents}}
+
+    # Dynamic routing
+    from backend.agents.dynamic_routing import route_query
+    use_llm = ctx.get("debate_config", {}).get("use_llm_routing", True)
+    selected = await route_query(query, use_llm=use_llm)
+
+    return {"context": {**ctx, "active_agents": selected}}
+
+
+# ---------------------------------------------------------------------------
 # Day 3: RAG Pre-fetch node
 # ---------------------------------------------------------------------------
+@node_error_handler(fallback={"context": {"rag_contexts": {}}})
 async def rag_prefetch(state: CouncilState) -> dict:
     """RAG pre-fetch node: fetch context for all agents before fan-out."""
     query = state.get("query", "")
     if not query:
         return {"context": {**(state.get("context") or {}), "rag_contexts": {}}}
 
-    try:
-        from backend.rag.agent_rag_integration import prefetch_rag_for_all_agents
-        rag_contexts = await prefetch_rag_for_all_agents(query)
-        logger.info(f"RAG prefetch complete for {len(rag_contexts)} agents")
-        return {"context": {**(state.get("context") or {}), "rag_contexts": rag_contexts}}
-    except Exception as e:
-        logger.warning(f"RAG prefetch node failed (agents will proceed without RAG): {e}")
-        return {"context": {**(state.get("context") or {}), "rag_contexts": {}}}
+    from backend.rag.agent_rag_integration import prefetch_rag_for_all_agents
+    rag_contexts = await prefetch_rag_for_all_agents(query)
+    logger.info(f"RAG prefetch complete for {len(rag_contexts)} agents")
+    return {"context": {**(state.get("context") or {}), "rag_contexts": rag_contexts}}
 
 
 # ---------------------------------------------------------------------------
 # Day 4: MCP Escalation node
 # ---------------------------------------------------------------------------
+@node_error_handler(fallback={"context": {"rag_meta": {}, "mcp_contexts": {}}})
 async def mcp_escalation(state: CouncilState) -> dict:
     """MCP escalation node: auto-call MCP tools for agents with low RAG confidence."""
     query = state.get("query", "")
@@ -61,100 +89,106 @@ async def mcp_escalation(state: CouncilState) -> dict:
     if not query:
         return {"context": {**context, "rag_meta": rag_meta, "mcp_contexts": {}}}
 
-    try:
-        from backend.mcp.agent_mcp_integration import prefetch_mcp_for_all_agents
-        mcp_contexts = await prefetch_mcp_for_all_agents(query, rag_confidences=rag_meta)
-        escalated = [n for n, c in mcp_contexts.items() if c]
-        if escalated:
-            logger.info(f"MCP escalation: auto-called tools for agents {escalated}")
-        return {"context": {**context, "rag_meta": rag_meta, "mcp_contexts": mcp_contexts}}
-    except Exception as e:
-        logger.warning(f"MCP escalation node failed: {e}")
-        return {"context": {**context, "rag_meta": rag_meta, "mcp_contexts": {}}}
+    from backend.mcp.agent_mcp_integration import prefetch_mcp_for_all_agents
+    mcp_contexts = await prefetch_mcp_for_all_agents(query, rag_confidences=rag_meta)
+    escalated = [n for n, c in mcp_contexts.items() if c]
+    if escalated:
+        logger.info(f"MCP escalation: auto-called tools for agents {escalated}")
+    return {"context": {**context, "rag_meta": rag_meta, "mcp_contexts": mcp_contexts}}
 
 
 # ---------------------------------------------------------------------------
 # Day 5: Predictions node
 # ---------------------------------------------------------------------------
+@node_error_handler(fallback={"predictions": []})
 async def predictions_node(state: CouncilState) -> dict:
     """Generate ensemble predictions (price, disruption, lead time) for the debate."""
     query = state.get("query", "")
     if not query:
         return {"predictions": []}
 
-    try:
-        from backend.predictions_engine import generate_predictions_for_debate
-        preds = await generate_predictions_for_debate(query, state)
-        logger.info(f"Generated {len(preds)} predictions")
-        return {"predictions": preds}
-    except Exception as e:
-        logger.warning(f"Predictions node failed: {e}")
-        return {"predictions": []}
+    from backend.predictions_engine import generate_predictions_for_debate
+    preds = await generate_predictions_for_debate(query, state)
+    logger.info(f"Generated {len(preds)} predictions")
+    return {"predictions": preds}
 
 
 # ---------------------------------------------------------------------------
 # Day 5: Debate Engine node
 # ---------------------------------------------------------------------------
+@node_error_handler(
+    fallback={
+        "debate_rounds": [],
+        "confidence": 0.0,
+        "risk_score": 50.0,
+        "recommendation": "Debate engine failed",
+        "fallback_options": [],
+    },
+    log_level="error",
+)
 async def debate_node(state: CouncilState) -> dict:
     """Run the 3-round structured debate engine.
 
     After all agents have contributed, the DebateEngine orchestrates:
       Round 1: Parallel Analysis summary
-      Round 2: Challenge & Counter phase
+      Self-critique: Agents review their own analysis (optional)
+      Round 2: Challenge & Counter phase (skipped in lite mode)
       Round 3: Validation & Synthesis
+
+    Supports per-request overrides for lite_mode and enable_self_critique
+    via state.context.debate_config.
 
     Produces: debate_rounds, confidence, risk_score, recommendation, fallback_options
     """
-    try:
-        from backend.debate_engine import debate_engine
-        result = await debate_engine.run_debate(state)
-        logger.info(
-            f"Debate complete: {len(result.get('debate_rounds', []))} rounds, "
-            f"confidence={result.get('confidence', 0):.2f}, "
-            f"risk={result.get('risk_score', 0):.1f}"
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Debate engine failed: {e}")
-        return {
-            "debate_rounds": [],
-            "confidence": 0.0,
-            "risk_score": 50.0,
-            "recommendation": f"Debate engine failed: {e}",
-            "fallback_options": [],
-        }
+    from backend.debate_engine import DebateEngine
+    from backend.config import settings as _s
+
+    # Per-request overrides from context
+    ctx = state.get("context") or {}
+    debate_config = ctx.get("debate_config") or {}
+    lite = debate_config.get("lite", _s.council_lite_mode)
+    self_critique = debate_config.get("enable_self_critique", _s.enable_self_critique)
+
+    engine = DebateEngine(
+        max_rounds=_s.max_debate_rounds,
+        consensus_threshold=_s.confidence_gap_threshold,
+        lite_mode=lite,
+        enable_self_critique=self_critique,
+    )
+    result = await engine.run_debate(state)
+    logger.info(
+        f"Debate complete: {len(result.get('debate_rounds', []))} rounds, "
+        f"confidence={result.get('confidence', 0):.2f}, "
+        f"risk={result.get('risk_score', 0):.1f}, "
+        f"lite={lite}, self_critique={self_critique}"
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Day 5: Fallback Engine node
 # ---------------------------------------------------------------------------
+@node_error_handler(fallback={"tiered_fallbacks": []})
 async def fallback_node(state: CouncilState) -> dict:
     """Generate tiered fallback options based on debate and prediction results."""
-    try:
-        from backend.fallback_engine import fallback_engine
-        result = await fallback_engine.generate_fallbacks(state)
-        n = len(result.get("tiered_fallbacks", []))
-        logger.info(f"Generated {n} tiered fallback options")
-        return result
-    except Exception as e:
-        logger.warning(f"Fallback engine failed: {e}")
-        return {"tiered_fallbacks": []}
+    from backend.fallback_engine import fallback_engine
+    result = await fallback_engine.generate_fallbacks(state)
+    n = len(result.get("tiered_fallbacks", []))
+    logger.info(f"Generated {n} tiered fallback options")
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Day 5: Brand Enhancement node
 # ---------------------------------------------------------------------------
+@node_error_handler(fallback={"brand_sentiment": None})
 async def brand_enhancement_node(state: CouncilState) -> dict:
     """Run brand sentiment analysis, crisis comms, ad pivot, and competitor analysis."""
-    try:
-        from backend.brand_agent_enhancement import brand_enhancer
-        result = await brand_enhancer.run_full_enhancement(state)
-        sentiment = result.get("brand_sentiment", {})
-        logger.info(f"Brand enhancement: sentiment={sentiment.get('overall_sentiment', 'unknown')}")
-        return result
-    except Exception as e:
-        logger.warning(f"Brand enhancement failed: {e}")
-        return {"brand_sentiment": None}
+    from backend.brand_agent_enhancement import brand_enhancer
+    result = await brand_enhancer.run_full_enhancement(state)
+    sentiment = result.get("brand_sentiment", {})
+    logger.info(f"Brand enhancement: sentiment={sentiment.get('overall_sentiment', 'unknown')}")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -177,11 +211,34 @@ def needs_brand_enhancement(state: CouncilState) -> str:
 # ---------------------------------------------------------------------------
 # Build the full council graph
 # ---------------------------------------------------------------------------
+
+def _agent_should_run(agent_name: str, state: CouncilState) -> bool:
+    """Check if an agent should run based on dynamic routing results."""
+    ctx = state.get("context") or {}
+    active_agents = ctx.get("active_agents")
+    if not active_agents:
+        return True
+    return agent_name in active_agents
+
+
+def _agent_fanout(state: CouncilState) -> dict[str, str]:
+    """Single routing function for all agents — eliminates race condition from multiple conditional edges."""
+    AGENT_NAMES = ["risk", "supply", "logistics", "market", "finance", "brand"]
+    targets = {}
+    for name in AGENT_NAMES:
+        if _agent_should_run(name, state):
+            targets[name] = name
+    if not targets:
+        targets["predictions"] = "predictions"
+    return targets
+
+
 def build_council_graph() -> StateGraph:
     graph = StateGraph(CouncilState)
 
     # Add all nodes
     graph.add_node("moderator", moderator_parse)
+    graph.add_node("dynamic_routing", dynamic_routing_node)
     graph.add_node("rag_prefetch", rag_prefetch)
     graph.add_node("mcp_escalation", mcp_escalation)
     graph.add_node("risk", risk_agent)
@@ -198,15 +255,17 @@ def build_council_graph() -> StateGraph:
 
     graph.set_entry_point("moderator")
 
-    # Phase 1: Moderator → RAG → MCP → Agent fan-out
-    graph.add_edge("moderator", "rag_prefetch")
+    # Phase 1: Moderator → Dynamic Routing → RAG → MCP → Agent fan-out
+    graph.add_edge("moderator", "dynamic_routing")
+    graph.add_edge("dynamic_routing", "rag_prefetch")
     graph.add_edge("rag_prefetch", "mcp_escalation")
 
-    for agent in ["risk", "supply", "logistics", "market", "finance", "brand"]:
-        graph.add_edge("mcp_escalation", agent)
+    # Single conditional edge for all agents — returns dict of all agents that should run
+    graph.add_conditional_edges("mcp_escalation", _agent_fanout, [
+        "risk", "supply", "logistics", "market", "finance", "brand", "predictions"
+    ])
 
-    # Phase 2: After all agents → Predictions → Debate → Fallback
-    # All agents converge to predictions node
+    # Phase 2: All agents converge to predictions node
     for agent in ["risk", "supply", "logistics", "market", "finance", "brand"]:
         graph.add_edge(agent, "predictions")
 
@@ -309,15 +368,17 @@ async def run_council_streaming(
 
     compiled = graph.compile(**compile_kwargs)
 
-    # Stream events from the graph
-    current_state = initial_state
+    # Stream events from the graph — track final state for Redis
+    final_state = initial_state
     async for event in compiled.astream_events(initial_state, version="v2"):
         kind = event.get("event", "")
 
-        # Agent node completion
+        # Track state updates
         if kind == "on_chain_end" and event.get("data", {}).get("output"):
             node_name = event.get("name", "")
             output = event["data"]["output"]
+            if isinstance(output, dict):
+                final_state = {**final_state, **output}
 
             if node_name in ("risk", "supply", "logistics", "market", "finance", "brand"):
                 payload = {
@@ -327,7 +388,6 @@ async def run_council_streaming(
                         "session_id": session_id,
                     },
                 }
-                # Merge output into current state tracking
                 if isinstance(output, dict) and "agent_outputs" in output:
                     for ao in output.get("agent_outputs", []):
                         payload["data"]["confidence"] = ao.confidence if hasattr(ao, "confidence") else 0
@@ -374,45 +434,19 @@ async def run_council_streaming(
                     except Exception:
                         pass
 
-    # If human-in-loop, the graph may have paused — run again with approval
-    if settings.human_in_loop:
-        # Get the current state from the paused graph
-        try:
-            state_snapshot = compiled.get_state(initial_state)
-            if state_snapshot and not state_snapshot.values.get("human_approved"):
-                logger.info(f"Graph paused for human review: session={session_id}")
-                payload = {
-                    "type": "human_review_needed",
-                    "data": {
-                        "session_id": session_id,
-                        "debate_rounds": state_snapshot.values.get("debate_rounds", []),
-                        "confidence": state_snapshot.values.get("confidence", 0),
-                        "risk_score": state_snapshot.values.get("risk_score", 0),
-                    },
-                }
-                yield payload
-                if ws_callback:
-                    try:
-                        await ws_callback(payload)
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.warning(f"Human-in-loop state check failed: {e}")
-
-    # Store session to Redis for /council/history
+    # Store session to Redis using tracked state — no double execution
     try:
         from backend.db.redis_client import cache_set
-        final_result = await compiled.ainvoke(initial_state)
         session_data = {
             "session_id": session_id,
             "query": query,
-            "recommendation": final_result.get("recommendation", ""),
-            "confidence": final_result.get("confidence", 0),
-            "risk_score": final_result.get("risk_score", 0),
-            "debate_rounds": final_result.get("debate_rounds", []),
+            "recommendation": final_state.get("recommendation", ""),
+            "confidence": final_state.get("confidence", 0),
+            "risk_score": final_state.get("risk_score", 0),
+            "debate_rounds": final_state.get("debate_rounds", []),
             "agent_outputs": [
                 {"agent": o.agent, "confidence": o.confidence, "contribution": o.contribution[:300]}
-                for o in final_result.get("agent_outputs", [])
+                for o in final_state.get("agent_outputs", [])
             ],
             "timestamp": time.time(),
         }

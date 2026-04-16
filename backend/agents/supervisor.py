@@ -53,11 +53,13 @@ async def run_all_agents(state: CouncilState) -> dict:
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    all_outputs = state.get("agent_outputs", [])
+    all_outputs = list(state.get("agent_outputs", []))
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             logger.error(f"Agent {list(AGENT_MAP.keys())[i]} failed: {result}")
         elif isinstance(result, dict):
-            all_outputs = result.get("agent_outputs", all_outputs)
+            outputs = result.get("agent_outputs", [])
+            if outputs:
+                all_outputs.extend(outputs)
 
     return {"agent_outputs": all_outputs}

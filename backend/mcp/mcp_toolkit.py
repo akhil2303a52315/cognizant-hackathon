@@ -158,6 +158,8 @@ class MultiServerMCPClient:
             dict with 'result', 'cached', 'tool', 'latency_ms', 'scope_valid'
         """
         start = time.time()
+        import hashlib
+        input_hash = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()
 
         # Scope validation
         if not is_tool_allowed_for_agent(tool_name, self.agent_name):
@@ -175,8 +177,6 @@ class MultiServerMCPClient:
 
         # Cache check
         if use_cache:
-            import hashlib
-            input_hash = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()
             cached_result = await cache_get(f"mcp:{tool_name}:{input_hash}")
             if cached_result is not None:
                 latency = int((time.time() - start) * 1000)
@@ -265,7 +265,7 @@ class MultiServerMCPClient:
                 name=name,
                 description=tool_info["description"],
                 func=_make_sync(name, agent),
-                coroutine=_make_coroutine(name, agent)(),
+                coroutine=_make_coroutine(name, agent),
             )
             tools.append(tool)
 

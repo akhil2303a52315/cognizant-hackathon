@@ -95,12 +95,71 @@ export interface Recommendation {
   risk_level: 'low' | 'medium' | 'high' | 'critical'
 }
 
-export const SEVEN_AGENTS: AgentInfo[] = [
-  { key: 'analyst', label: 'Analyst', color: 'bg-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200', textColor: 'text-blue-700', dotColor: 'bg-blue-500', hexColor: '#3B82F6' },
-  { key: 'critic', label: 'Critic', color: 'bg-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200', textColor: 'text-red-700', dotColor: 'bg-red-500', hexColor: '#EF4444' },
-  { key: 'creative', label: 'Creative', color: 'bg-purple-500', bgColor: 'bg-purple-50', borderColor: 'border-purple-200', textColor: 'text-purple-700', dotColor: 'bg-purple-500', hexColor: '#A855F7' },
-  { key: 'risk', label: 'Risk', color: 'bg-amber-500', bgColor: 'bg-amber-50', borderColor: 'border-amber-200', textColor: 'text-amber-700', dotColor: 'bg-amber-500', hexColor: '#F97316' },
-  { key: 'legal', label: 'Legal', color: 'bg-emerald-500', bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200', textColor: 'text-emerald-700', dotColor: 'bg-emerald-500', hexColor: '#22C55E' },
-  { key: 'market', label: 'Market', color: 'bg-pink-500', bgColor: 'bg-pink-50', borderColor: 'border-pink-200', textColor: 'text-pink-700', dotColor: 'bg-pink-500', hexColor: '#EC4899' },
-  { key: 'optimizer', label: 'Optimizer', color: 'bg-cyan-500', bgColor: 'bg-cyan-50', borderColor: 'border-cyan-200', textColor: 'text-cyan-700', dotColor: 'bg-cyan-500', hexColor: '#06B6D4' },
+// ---------------------------------------------------------------------------
+// Full graph pipeline types (from LangGraph council)
+// ---------------------------------------------------------------------------
+
+export interface Prediction {
+  type: 'price' | 'disruption' | 'lead_time'
+  label: string
+  value: number
+  unit: string
+  confidence: number
+  horizon: string
+}
+
+export interface TieredFallback {
+  type: 'tier1_immediate' | 'tier2_shortterm' | 'tier3_strategic'
+  details: string
+  cost_estimate: number
+  time_to_implement: string
+}
+
+export interface BrandSentiment {
+  overall_sentiment: string
+  sentiment_score: number
+  crisis_detected: boolean
+  crisis_comms?: string
+  ad_pivot?: string
+  competitor_analysis?: Record<string, unknown>
+}
+
+export interface CouncilGraphResult {
+  session_id: string
+  query: string
+  recommendation: string
+  confidence: number
+  risk_score: number
+  debate_rounds: DebateRound[]
+  agent_outputs: AgentOutput[]
+  predictions: Prediction[]
+  tiered_fallbacks: TieredFallback[]
+  brand_sentiment: BrandSentiment | null
+  debate_history: { round: number; phase: string; confidence: number }[]
+}
+
+/** WebSocket event from /observability/ws/debate full graph pipeline */
+export interface CouncilWSEvent {
+  type: 'agent_done' | 'debate_round' | 'complete' | 'human_review_needed' | 'heartbeat'
+  data: {
+    session_id?: string
+    agent?: string
+    confidence?: number
+    contribution?: string
+    debate_rounds?: DebateRound[]
+    recommendation?: string
+    risk_score?: number
+  }
+}
+
+export const COUNCIL_AGENTS: AgentInfo[] = [
+  { key: 'risk', label: 'Risk Sentinel', color: 'bg-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200', textColor: 'text-red-700', dotColor: 'bg-red-500', hexColor: '#EF4444' },
+  { key: 'supply', label: 'Supply Optimizer', color: 'bg-violet-500', bgColor: 'bg-violet-50', borderColor: 'border-violet-200', textColor: 'text-violet-700', dotColor: 'bg-violet-500', hexColor: '#7C3AED' },
+  { key: 'logistics', label: 'Logistics Navigator', color: 'bg-cyan-500', bgColor: 'bg-cyan-50', borderColor: 'border-cyan-200', textColor: 'text-cyan-700', dotColor: 'bg-cyan-500', hexColor: '#06B6D4' },
+  { key: 'market', label: 'Market Intelligence', color: 'bg-amber-500', bgColor: 'bg-amber-50', borderColor: 'border-amber-200', textColor: 'text-amber-700', dotColor: 'bg-amber-500', hexColor: '#F97316' },
+  { key: 'finance', label: 'Finance Guardian', color: 'bg-emerald-500', bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200', textColor: 'text-emerald-700', dotColor: 'bg-emerald-500', hexColor: '#059669' },
+  { key: 'brand', label: 'Brand Protector', color: 'bg-pink-500', bgColor: 'bg-pink-50', borderColor: 'border-pink-200', textColor: 'text-pink-700', dotColor: 'bg-pink-500', hexColor: '#EC4899' },
 ]
+
+/** @deprecated Use COUNCIL_AGENTS instead */
+export const SEVEN_AGENTS = COUNCIL_AGENTS
