@@ -11,7 +11,10 @@ import { COUNCIL_AGENTS } from '@/types/council'
 import AgentCard from '@/components/shared/AgentCard'
 import RoundTab from '@/components/shared/RoundTab'
 import ModelBadge from '@/components/shared/ModelBadge'
-import MarkdownRenderer from '@/components/shared/MarkdownRenderer'
+import CitedMarkdownRenderer from '@/components/shared/CitedMarkdownRenderer'
+import AnimatedList from '@/components/shared/AnimatedList'
+import AnimatedSourceLinks from '@/components/shared/AnimatedSourceLinks'
+import SourcesPanel from '@/components/shared/SourcesPanel'
 import { toast } from '@/components/shared/Toast'
 
 const ROUND_CONFIG = [
@@ -43,7 +46,7 @@ export default function Debate() {
   const { 
     currentRound, agents, moderatorR1, moderatorR2,
     supervisorResult, viewMode,
-    isStreaming, reset
+    isStreaming, reset, citationMaps, pipelineStages, discoveredSources
   } = store
 
   const { startStream, stopStream } = useCouncilV2Stream()
@@ -120,6 +123,96 @@ export default function Debate() {
             </div>
           </div>
         </div>
+
+        {/* PIPELINE STAGES & SOURCES DISCOVERY */}
+        {(isStreaming || Object.keys(discoveredSources).length > 0) && (
+          <div className="px-8 py-4 bg-white/[0.02] border-b border-white/[0.06]">
+            {/* Main stage indicators */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {Object.entries(pipelineStages).map(([key, stage]) => {
+                const icons: Record<string, string> = {
+                  rag_fetching: '🔍',
+                  api_called: '🌐',
+                  mcp_fetched: '🔧',
+                  sources_ready: '📚'
+                }
+                const labels: Record<string, string> = {
+                  rag_fetching: 'RAG Knowledge Base',
+                  api_called: 'Live APIs',
+                  mcp_fetched: 'MCP Tools',
+                  sources_ready: 'Sources Ready'
+                }
+                const isActive = stage.status === 'active'
+                const isDone = stage.status === 'done'
+                return (
+                  <div 
+                    key={key}
+                    className={`
+                      flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium
+                      transition-all duration-300
+                      ${isDone ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
+                        isActive ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 
+                        'bg-white/5 text-white/30 border border-white/10'}
+                    `}
+                    style={isActive ? { animation: 'pulse 2s infinite' } : {}}
+                  >
+                    <span>{icons[key]}</span>
+                    <span>{labels[key]}</span>
+                    {isActive && stage.detail && (
+                      <span className="text-white/50">— {stage.detail}</span>
+                    )}
+                    {isDone && stage.count > 0 && (
+                      <span className="ml-1">({stage.count})</span>
+                    )}
+                    {key !== 'sources_ready' && (
+                      <span className="text-white/20 ml-1">→</span>
+                    )}
+                  </div>
+                )
+              })}
+              
+              {/* Animated Source Links - glowing pill container */}
+              <div className="ml-2 flex items-center">
+                <div className="
+                  relative overflow-hidden
+                  rounded-full px-4 py-2
+                  bg-white/5 border border-indigo-500/40
+                  shadow-[0_0_15px_rgba(99,102,241,0.3)]
+                ">
+                  <AnimatedSourceLinks isActive={isStreaming} />
+                </div>
+              </div>
+            </div>
+            
+            {/* Live source discovery display with AnimatedList */}
+            {Object.keys(discoveredSources).length > 0 && (
+              <div className="mt-4 border-t border-white/10 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] text-white/40 uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Live Source Discovery
+                  </span>
+                  <span className="text-[10px] text-white/30">
+                    {Object.values(discoveredSources).flat().length} sources found
+                  </span>
+                </div>
+                <AnimatedList
+                  items={Object.entries(discoveredSources).flatMap(([agent, sources]) => {
+                    const agentInfo = COUNCIL_AGENTS.find(a => a.key === agent)
+                    return sources.map(src => ({
+                      num: src.num,
+                      title: src.title,
+                      url: src.url,
+                      agent: agent,
+                      agentColor: agentInfo?.hexColor || '#666'
+                    }))
+                  })}
+                  maxHeight="200px"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* CHAT CONTENT */}
         <div className="flex-1 overflow-y-auto px-8 py-8 scrollbar-thin scrollbar-thumb-white/10">
@@ -235,15 +328,37 @@ export default function Debate() {
                              </div>
                            </div>
 
-                           <div className="prose prose-invert max-w-none 
-                                          text-white/80 leading-relaxed text-[15px] font-medium font-inter
-                                          prose-headings:font-outfit prose-headings:text-white prose-headings:font-bold
-                                          prose-strong:text-white prose-strong:font-bold prose-strong:font-outfit
-                                          prose-p:mb-6 prose-li:mb-2
-                                          selection:bg-white/10">
-                             <MarkdownRenderer content={content} />
+<div className="prose prose-invert max-w-none 
+                                           text-white/80 leading-relaxed text-[15px] font-medium font-inter
+                                           prose-headings:font-outfit prose-headings:text-white prose-headings:font-bold
+                                           prose-strong:text-white prose-strong:font-bold prose-strong:font-outfit
+                                           prose-p:mb-6 prose-li:mb-2
+                                           selection:bg-white/10">
+                              <CitedMarkdownRenderer 
+                                content={content} 
+                                urlMap={citationMaps[agentInfo.key] || {}} 
+                                accentColor={agentInfo.hexColor}
+                              />
+                            </div>
+
+                           {/* SOURCES & REFERENCES PANEL */}
+                           <div className="mt-4">
+                             <SourcesPanel
+                               sources={Object.entries(discoveredSources).flatMap(([agent, srcs]) => {
+                                 if (agent !== agentInfo.key) return []
+                                 return srcs.map(src => ({
+                                   num: src.num,
+                                   title: src.title,
+                                   url: src.url,
+                                   agent: agent,
+                                   agentColor: agentInfo.hexColor,
+                                 }))
+                               })}
+                               citationMap={citationMaps[agentInfo.key] || {}}
+                               accentColor={agentInfo.hexColor}
+                             />
                            </div>
-                           
+
                            {/* DECORATIVE BOTTOM LINE */}
                            <div className="mt-8 h-[1px] w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                          </div>
@@ -272,7 +387,29 @@ export default function Debate() {
                       </div>
                     </div>
                     <div className="prose prose-invert max-w-none text-white/80">
-                      <MarkdownRenderer content={supervisorResult.output} />
+                      <CitedMarkdownRenderer 
+                        content={supervisorResult.output} 
+                        urlMap={citationMaps['supervisor'] || {}}
+                        accentColor="#10b981"
+                      />
+                    </div>
+
+                    {/* Supervisor Sources & References */}
+                    <div className="mt-4">
+                      <SourcesPanel
+                        sources={Object.entries(discoveredSources).flatMap(([agent, srcs]) => {
+                          if (agent !== 'supervisor') return []
+                          return srcs.map(src => ({
+                            num: src.num,
+                            title: src.title,
+                            url: src.url,
+                            agent: 'supervisor',
+                            agentColor: '#10b981',
+                          }))
+                        })}
+                        citationMap={citationMaps['supervisor'] || {}}
+                        accentColor="#10b981"
+                      />
                     </div>
                   </motion.div>
                 )}

@@ -488,9 +488,15 @@ async def gather_agent_data(agent_key: str, query: str) -> CitationBundle:
     return bundle
 
 
-async def gather_all_agents(query: str) -> dict[str, CitationBundle]:
-    """Pre-fetch data for all 6 agents in parallel."""
-    agent_keys = ["risk", "supply", "logistics", "market", "finance", "brand"]
+async def gather_all_agents(query: str, agent_keys: list[str] | None = None) -> dict[str, CitationBundle]:
+    """Pre-fetch data for all 6 agents in parallel.
+    
+    Args:
+        query: The search query
+        agent_keys: Optional list of specific agent keys to gather. If None, gathers for all 6 agents.
+    """
+    if agent_keys is None:
+        agent_keys = ["risk", "supply", "logistics", "market", "finance", "brand"]
     tasks = [gather_agent_data(key, query) for key in agent_keys]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 

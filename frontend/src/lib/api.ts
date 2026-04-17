@@ -110,6 +110,7 @@ export const ingestApi = {
   news: (articles: Record<string, unknown>[]) => api.post('/ingest/news', { articles }),
   social: (posts: Record<string, unknown>[], platform?: string) =>
     api.post('/ingest/social', { posts, platform }),
+  status: () => api.get('/ingest/status'),
 }
 
 // --- Settings ---

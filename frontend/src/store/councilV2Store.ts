@@ -31,6 +31,7 @@ interface CouncilV2State {
   streamError: string | null
   citationMaps: Record<string, Record<string, string>>
   pipelineStages: Record<PipelineStageKey, PipelineStageState>
+  discoveredSources: Record<string, {num: number, title: string, url: string}[]>
   handleV2Event: (event: CouncilV2StreamEvent) => void
   setSelectedAgent: (agent: string | null) => void
   setViewMode: (mode: 'agent' | 'moderator' | 'supervisor') => void
@@ -94,6 +95,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
   streamError: null,
   citationMaps: {},
   pipelineStages: makeInitialStages(),
+  discoveredSources: {},
 
   handleV2Event: (event) => {
     switch (event.type) {
@@ -255,6 +257,42 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
         break
       }
 
+      case 'citations_map': {
+        const agentKey = (event as any).agent || ''
+        const urls = (event as any).urls || {}
+        if (agentKey) {
+          set((state) => ({
+            citationMaps: {
+              ...state.citationMaps,
+              [agentKey]: urls,
+            },
+          }))
+        }
+        break
+      }
+
+      case 'source_discovered': {
+        const agentKey = (event as any).agent || ''
+        const sources = (event as any).sources || []
+        const count = (event as any).count || 0
+        // Store discovered sources immediately and show in pipeline
+        set((state) => ({
+          discoveredSources: {
+            ...state.discoveredSources,
+            [agentKey]: sources
+          },
+          pipelineStages: {
+            ...state.pipelineStages,
+            mcp_fetched: { 
+              status: 'active', 
+              detail: `${agentKey}: ${count} sources found`, 
+              count 
+            }
+          }
+        }))
+        break
+      }
+
       case 'complete':
         set({
           isStreaming: false,
@@ -284,6 +322,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       streamError: null,
       citationMaps: {},
       pipelineStages: makeInitialStages(),
+      discoveredSources: {},
     }),
   setStreaming: (streaming) => set({ isStreaming: streaming }),
   setStreamError: (error) => set({ streamError: error }),

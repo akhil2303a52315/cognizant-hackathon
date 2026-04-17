@@ -48,53 +48,105 @@ AGENT_PROMPTS = {
 }
 
 
-MODERATOR_PROMPT = """You are the Moderator — you orchestrate the council, score agent contributions, and synthesize findings.
+MODERATOR_PROMPT = """You are the **Moderator** — the orchestrator of the Supply Chain Council debate.
 
-Your job:
-1. Score each agent's contribution (0-100) based on data quality, citation count, and relevance
-2. Identify where agents agree (consensus points) and disagree (conflict points)
-3. Write a concise executive summary of key findings
-4. Calculate an overall consensus percentage
+═══ YOUR ROLE ═══
+You run the debate process, score agent contributions, and synthesize findings into a coherent recommendation. You are the traffic controller — not the expert in any domain, but the one who ensures every expert is heard fairly.
 
-Be objective. Higher scores for: more real data citations, quantified claims, specific actionable insights.
-Lower scores for: vague statements, lack of citations, contradicted by data.
-"""
+═══ DEBATING RULES ═══
+1. **Scoring**: Rate each agent (0-100) based on: data quality, citation count, actionable insights, relevance
+2. **Consensus Detection**: Identify where agents agree (consensus points) and where they conflict (conflict points)
+3. **Challenge Protocol**: If agents conflict, prompt them to defend their positions in next round
+4. **Synthesis**: Combine inputs into unified recommendation with confidence-weighted rationale
 
-SUPERVISOR_PROMPT = """You are the Supervisor — the final decision authority of the Supply Chain Council.
+═══ SCORING CRITERIA ═══
+- **High scores (80-100)**: Real data citations, quantified claims, specific actionable insights, proper JSON schema
+- **Medium scores (50-79)**: Some data, general recommendations, missing specific numbers
+- **Low scores (0-49)**: Vague statements, no citations, contradicted by other agents
 
-You review the debate results from 2 rounds and deliver the definitive final verdict.
+═══ OUTPUT SCHEMA ═══
+Always produce:
 
-**The agents have used real-time data:** DuckDuckGo search, Firecrawl web scraping, live APIs (news, market, weather, forex), and RAG retrieval — with numbered citations.
+```json
+{
+  "round_number": 1-3,
+  "agent_scores": {"risk": 0-100, "supply": 0-100, "logistics": 0-100, "market": 0-100, "finance": 0-100, "brand": 0-100},
+  "consensus_points": ["list of things agents agree on"],
+  "conflict_points": [{"agent1": "...", "agent2": "...", "issue": "..."}],
+  "executive_summary": "2-3 sentences max",
+  "overall_consensus_pct": 0-100,
+  "recommended_actions": [{"priority": 1-3, "action": "...", "owner": "agent"}]
+}
+```
 
-**Your final verdict must include:**
+═══ SYNTHESIS RULES ═══
+- Weight recommendations by confidence scores (higher confidence = more weight)
+- Escalate CRITICAL risks immediately regardless of consensus
+- Include tiered fallback options (Tier 1: Immediate, Tier 2: Short-term, Tier 3: Strategic)
+- Flag any unresolved conflicts for Supervisor review
 
-## 🎯 Executive Summary
-[2-3 sentences maximum — the most important finding]
+═══ TOOLS YOU CAN USE ═══
+- Firecrawl web scraping for additional context
+- RAG knowledge base for historical precedents
+- All MCP tools if needed for verification
 
-## ✅ Final Verdict
-[Unambiguous answer to the original question]
+Be objective, fair, and decisive. The Council needs a clear path forward."""
 
-## 📊 Confidence Assessment
-- Overall confidence: XX/100
-- Data quality: [Strong/Moderate/Weak]
-- Consensus level: [High/Medium/Low] among agents
+SUPERVISOR_PROMPT = """You are the **Supervisor** — the final decision authority of the Supply Chain Council.
 
-## 🏆 Most Reliable Agents This Session
-[Rank top 3 with one-line justification each]
+═══ YOUR ROLE ═══
+You review the complete debate results from all 3 rounds and deliver the definitive final verdict. You have the final say — no agent can override your decision. You balance risk, cost, brand, and operational reality into one executable recommendation.
 
-## ⚡ Priority Actions (Next 72 Hours)
-1. [Most urgent action]
-2. [Second priority]
-3. [Third priority]
+═══ REVIEW REQUIREMENTS ═══
+1. **Read the full debate**: All Round 1 analyses, Round 2 challenges, and Round 3 final positions
+2. **Check consensus**: What did agents agree on? What conflicts remain unresolved?
+3. **Verify data quality**: Are citations real? Are numbers sourced? Are claims backed?
+4. **Assess confidence**: Which agents were most confident? Was confidence warranted?
+5. **Check escalation flags**: Did any agent raise CRITICAL or CATASTROPHIC risks?
 
-## 📅 Strategic Roadmap
-- **30 days:** [Key milestone]
-- **60 days:** [Key milestone]
-- **90 days:** [Key milestone]
+═══ OUTPUT SCHEMA (Required) ═══
 
-## ⚠️ Unresolved Risks
-[Any conflicts or gaps the council could not resolve]
-"""
+```json
+{
+  "executive_summary": "2-3 sentences - the most critical finding",
+  "final_verdict": "Clear answer to the original question",
+  "confidence_assessment": {
+    "overall_confidence": 0-100,
+    "data_quality": "Strong|Moderate|Weak",
+    "consensus_level": "High|Medium|Low"
+  },
+  "reliable_agents": [{"agent": "...", "justification": "..."}],
+  "priority_actions": [
+    {"priority": 1, "action": "...", "timeline": "24h|72h|1w|1m", "owner": "agent"},
+    {"priority": 2, "action": "..."},
+    {"priority": 3, "action": "..."}
+  ],
+  "strategic_roadmap": {
+    "day30": "key milestone",
+    "day60": "key milestone",
+    "day90": "key milestone"
+  },
+  "unresolved_risks": ["what the council couldn't resolve"],
+  "tiered_fallbacks": [
+    {"tier": 1, "name": "Immediate", "actions": ["..."]},
+    {"tier": 2, "name": "Short-term", "actions": ["..."]},
+    {"tier": 3, "name": "Strategic", "actions": ["..."]}
+  ]
+}
+```
+
+═══ DECISION CRITERIA ═══
+- **High confidence + High consensus**: Proceed with recommendation
+- **High confidence + Low consensus**: Escalate to human decision
+- **Low confidence**: Request more data before deciding
+- **CRITICAL risk flagged**: Always escalate regardless of consensus
+
+═══ TOOLS YOU CAN USE ═══
+- Firecrawl for verification of critical claims
+- RAG for historical precedent analysis
+- Any MCP tool for final data verification
+
+You are the final checkpoint. Every decision you make has material business impact. Be rigorous, be clear, be decisive."""
 
 # Citation + formatting enforcement added to every agent prompt
 CITATION_ENFORCEMENT = """
@@ -240,43 +292,77 @@ async def council_v2_stream(request: CouncilV2Request):
         yield _stage_event("rag_fetching", "Querying RAG vector store for all 6 agents...", 0)
 
         try:
-            from backend.data_gatherer import gather_all_agents
+            from backend.data_gatherer import gather_all_agents, CitationBundle
         except ImportError as e:
             logger.error(f"data_gatherer import failed: {e}")
-            gather_all_agents = None
+            yield _stage_event("sources_ready", "Data gatherer unavailable", 0)
+            return
 
         citation_bundles = {}
-        if gather_all_agents:
-            try:
-                # ── STAGE 2: API Calls ──
-                yield _stage_event("api_called", "Firing real-time APIs: GNews, Alpha Vantage, OpenWeather, GDELT, NVD...", 0)
+        
+        try:
+            # ── STAGE 2: API Calls ──
+            yield _stage_event("api_called", "Firing real-time APIs: GNews, Alpha Vantage, OpenWeather...", 0)
 
-                # ── STAGE 3: MCP / Firecrawl ──
-                yield _stage_event("mcp_fetched", "Launching Firecrawl scrapers + DuckDuckGo search queries...", 0)
+            # ── STAGE 3: MCP / Firecrawl ──
+            yield _stage_event("mcp_fetched", "Gathering sources from DuckDuckGo & Firecrawl...", 0)
 
-                citation_bundles = await gather_all_agents(query)
+            # Gather sources for each agent one by one with live updates
+            agent_keys = ["risk", "supply", "logistics", "market", "finance", "brand"]
+            
+            for idx, agent_key in enumerate(agent_keys):
+                try:
+                    # Gather for single agent
+                    bundles = await gather_all_agents(query, agent_keys=[agent_key])
+                    bundle = bundles.get(agent_key, CitationBundle())
+                    
+                    source_count = len(bundle.citations)
+                    source_urls = []
+                    for c in bundle.citations:
+                        if c.url and c.url.startswith("http"):
+                            source_urls.append({
+                                "num": c.number, 
+                                "title": c.title[:60] if c.title else "Source", 
+                                "url": c.url
+                            })
+                    
+                    # Emit source discovery event for this agent (even if no URLs, show count)
+                    event_data = {
+                        'type': 'source_discovered',
+                        'agent': agent_key,
+                        'count': source_count,
+                        'sources': source_urls[:6]
+                    }
+                    yield f"data: {json.dumps(event_data)}\n\n"
+                    
+                    citation_bundles[agent_key] = bundle
+                    logger.info(f"[{session_id[:8]}] {agent_key}: {source_count} sources, {len(source_urls)} with URLs")
+                        
+                except Exception as ae:
+                    logger.warning(f"Source gathering for {agent_key}: {ae}")
+                    citation_bundles[agent_key] = CitationBundle()
 
-                total = sum(len(b.citations) for b in citation_bundles.values())
-                logger.info(f"[{session_id[:8]}] Total citations: {total}")
+            # Final aggregate
+            total = sum(len(b.citations) for b in citation_bundles.values())
+            logger.info(f"[{session_id[:8]}] Total sources: {total}")
 
-                # ── STAGE 4: Sources Ready ──
-                yield _stage_event("sources_ready", f"Research complete — {total} citations gathered across 6 agents", total)
+            # Emit final citations map
+            for agent_key in agent_keys:
+                bundle = citation_bundles.get(agent_key, CitationBundle())
+                url_map = {str(c.number): c.url for c in bundle.citations if c.url and c.url.startswith("http")}
+                if url_map:
+                    yield f"data: {json.dumps({'type': 'citations_map', 'agent': agent_key, 'urls': url_map})}\n\n"
+            
+            # ── STAGE 4: Sources Ready ──
+            yield _stage_event("sources_ready", f"Research complete — {total} sources across 6 agents", total)
+            yield f"data: {json.dumps({'type': 'citations_ready'})}\n\n"
 
-            except Exception as e:
-                logger.error(f"Data gathering failed: {e}")
-                yield _stage_event("sources_ready", f"Partial data gathered (some sources unavailable): {e}", 0)
+        except Exception as e:
+            logger.error(f"Data gathering failed: {e}")
+            yield _stage_event("sources_ready", f"Error: {str(e)[:100]}", 0)
 
         def get_bundle(agent_key: str):
-            from backend.data_gatherer import CitationBundle
             return citation_bundles.get(agent_key, CitationBundle())
-
-        # Emit per-agent citation maps for clickable [N] links
-        for agent_key in ("risk", "supply", "logistics", "market", "finance", "brand"):
-            bundle = get_bundle(agent_key)
-            url_map = {str(c.number): c.url for c in bundle.citations if c.url and c.url.startswith("http")}
-            if url_map:
-                yield f"data: {json.dumps({'type': 'citations_map', 'agent': agent_key, 'urls': url_map})}\n\n"
-        yield f"data: {json.dumps({'type': 'citations_ready'})}\n\n"
 
         # ── ROUND 1: Parallel Analysis ──
         yield f"data: {json.dumps({'type': 'round_start', 'round': 1, 'phase': 'analysis'})}\n\n"

@@ -63,7 +63,7 @@ export interface SupervisorResult {
 }
 
 export interface CouncilV2StreamEvent {
-  type: 'start' | 'round_start' | 'agent_start' | 'token' | 'agent_done' | 'agent_error' | 'moderator_start' | 'moderator_done' | 'supervisor_done' | 'complete'
+  type: 'start' | 'round_start' | 'agent_start' | 'token' | 'agent_done' | 'agent_error' | 'moderator_start' | 'moderator_done' | 'supervisor_done' | 'complete' | 'pipeline_stage' | 'citations_ready' | 'citations_map' | 'source_discovered'
   session_id?: string
   query?: string
   round?: number
@@ -77,6 +77,11 @@ export interface CouncilV2StreamEvent {
   summary?: string
   recommendation?: string
   output_preview?: string
+  stage?: string
+  detail?: string
+  count?: number
+  urls?: Record<string, string>
+  sources?: Array<{num: number, title: string, url: string}>
 }
 
 export interface CouncilStreamEvent {

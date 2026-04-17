@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Shield, TrendingUp, AlertTriangle, DollarSign, Activity, Globe, Thermometer, Waves, Zap, ArrowUpRight, ArrowDownRight, Layers, Database, Server, HardDrive, Cpu, FileText, Truck, Package, Clock, BarChart3, CheckCircle2, XCircle, AlertCircle, Users } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Shield, TrendingUp, AlertTriangle, DollarSign, Activity, Globe, Thermometer, Waves, Zap, ArrowUpRight, ArrowDownRight, Layers, Database, Server, HardDrive, Cpu, FileText, Truck, Package, Clock, BarChart3, CheckCircle2, XCircle, AlertCircle, Users, Heart, RefreshCw, Search, MessageSquare, Bell, Sparkles } from 'lucide-react'
 import { useMarketTicker, useRiskDashboard } from '@/hooks/useMarketQuery'
 import { useSuppliers, useRiskHeatmap, useSystemHealth, useRAGStats, useIngestStatus, useModelsStatus } from '@/hooks/useDashboardData'
 import LoadingSkeleton from '@/components/shared/LoadingSkeleton'
@@ -131,6 +132,12 @@ export default function Dashboard() {
   const healthyServices = Object.values(healthChecks).filter(v => v === 'ok').length
   const totalServices = Object.keys(healthChecks).length || 1
 
+  const healthScore = Math.round(
+    (healthyServices / Math.max(totalServices, 1)) * 30 +
+    (100 - Math.min(Number(avgRisk) || 0, 100)) * 0.4 +
+    Math.min(supplierCount, 10) * 3
+  )
+
   return (
     <div className="relative min-h-[calc(100vh-4rem)] overflow-hidden z-0 px-4 sm:px-6 py-8">
       {/* Ambient gradient orbs */}
@@ -168,6 +175,123 @@ export default function Dashboard() {
             {label}
           </button>
         ))}
+      </div>
+
+      {/* Supply Chain Health Score + Quick Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        {/* Health Score Gauge */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white/70 backdrop-blur-xl rounded-2xl p-6 border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Heart className="w-5 h-5 text-rose-500" />
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Supply Chain Health</h3>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="relative w-28 h-28">
+              <svg className="w-28 h-28 -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="#f1f5f9" strokeWidth="8" />
+                <circle 
+                  cx="50" cy="50" r="42" fill="none" 
+                  stroke={healthScore > 70 ? '#10b981' : healthScore > 40 ? '#f59e0b' : '#ef4444'}
+                  strokeWidth="8" 
+                  strokeDasharray={`${healthScore * 2.64} 264`}
+                  strokeLinecap="round"
+                  className="transition-all duration-1000"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-3xl font-black text-gray-900">{healthScore}</span>
+                <span className="text-[10px] text-gray-400 uppercase">Score</span>
+              </div>
+            </div>
+            <div className="flex-1 space-y-2">
+              {[
+                { label: 'Services', pct: Math.round((healthyServices / Math.max(totalServices, 1)) * 100), color: '#10b981' },
+                { label: 'Risk Level', pct: 100 - Math.min(Number(avgRisk) || 0, 100), color: '#f59e0b' },
+                { label: 'Suppliers', pct: Math.min(supplierCount * 10, 100), color: '#06b6d4' },
+              ].map(item => (
+                <div key={item.label}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-500">{item.label}</span>
+                    <span className="font-bold" style={{ color: item.color }}>{item.pct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${item.pct}%` }}
+                      transition={{ duration: 1, ease: 'easeOut' }}
+                      className="h-full rounded-full"
+                      style={{ background: item.color }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Quick Actions */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white/70 backdrop-blur-xl rounded-2xl p-6 border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-5 h-5 text-violet-500" />
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Quick Actions</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: 'Run Council', icon: MessageSquare, color: 'from-indigo-500 to-violet-500', desc: 'Start AI debate' },
+              { label: 'Risk Scan', icon: Shield, color: 'from-red-500 to-rose-500', desc: 'Full risk analysis' },
+              { label: 'Search Data', icon: Search, color: 'from-cyan-500 to-blue-500', desc: 'Query knowledge base' },
+              { label: 'Refresh All', icon: RefreshCw, color: 'from-emerald-500 to-teal-500', desc: 'Reload data feeds' },
+            ].map(action => (
+              <button
+                key={action.label}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-gray-50 hover:bg-white border border-gray-100 hover:border-gray-200 hover:shadow-md transition-all duration-200 group"
+              >
+                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${action.color} flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform`}>
+                  <action.icon className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-xs font-semibold text-gray-700">{action.label}</span>
+                <span className="text-[10px] text-gray-400">{action.desc}</span>
+              </button>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Recent Activity */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white/70 backdrop-blur-xl rounded-2xl p-6 border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Bell className="w-5 h-5 text-amber-500" />
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Recent Activity</h3>
+          </div>
+          <div className="space-y-3">
+            {[
+              { text: 'Council debate completed', time: '2m ago', icon: CheckCircle2, color: 'text-emerald-500' },
+              { text: 'Risk score updated', time: '5m ago', icon: AlertTriangle, color: 'text-amber-500' },
+              { text: 'New supplier data ingested', time: '12m ago', icon: Database, color: 'text-blue-500' },
+              { text: 'Market data refreshed', time: '18m ago', icon: TrendingUp, color: 'text-violet-500' },
+              { text: 'Disaster alert: Pacific region', time: '25m ago', icon: AlertCircle, color: 'text-red-500' },
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <item.icon className={`w-4 h-4 ${item.color} flex-shrink-0`} />
+                <span className="text-gray-700 flex-1 truncate">{item.text}</span>
+                <span className="text-xs text-gray-400 flex-shrink-0">{item.time}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       </div>
 
       {/* KPI Stats Row */}
