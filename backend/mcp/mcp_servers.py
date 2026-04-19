@@ -89,12 +89,11 @@ MCP_SERVERS: dict[str, MCPServerDef] = {
     ),
     "finance_market": MCPServerDef(
         name="finance_market",
-        description="Finance & Market — Stock quotes, forex rates, commodity prices, trade data, insurance",
+        description="Finance & Market — Yahoo Finance stock quotes, forex rates, commodity prices, trade data, insurance",
         tools=[
-            "stock_quote",
-            "company_profile",
-            "company_financials",
-            "forex_rate_finnhub",
+            "yahoo_stock_quote",
+            "yahoo_multiple_quotes",
+            "yahoo_company_info",
             "exchange_rate",
             "historical_rate",
             "fred_commodity_price",

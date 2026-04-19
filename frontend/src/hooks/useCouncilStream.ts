@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { getClientApiKey } from '@/lib/clientApiKey'
 import { useCouncilStore } from '@/store/councilStore'
 import type { CouncilStreamEvent } from '@/types/council'
 
@@ -11,7 +12,7 @@ export function useCouncilStream() {
     abortRef.current = new AbortController()
 
     try {
-      const apiKey = localStorage.getItem('api_key') || 'dev-key'
+      const apiKey = getClientApiKey()
       const response = await fetch('/council/stream', {
         method: 'POST',
         headers: {

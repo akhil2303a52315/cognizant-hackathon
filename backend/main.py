@@ -7,7 +7,17 @@ import os
 import time
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+PRIMARY_ENV_PATH = os.path.join(PROJECT_ROOT, ".env")
+FRONTEND_ENV_FALLBACK_PATH = os.path.join(PROJECT_ROOT, "frontend", "env")
+
+# Load project-level .env first; fallback to frontend/env for local setups.
+if os.path.exists(PRIMARY_ENV_PATH):
+    load_dotenv(PRIMARY_ENV_PATH)
+elif os.path.exists(FRONTEND_ENV_FALLBACK_PATH):
+    load_dotenv(FRONTEND_ENV_FALLBACK_PATH)
+else:
+    load_dotenv()
 
 # LangSmith env must be set before any langchain imports
 from backend.observability.langsmith_config import configure_langsmith_env

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { APIError } from '@/types/api'
+import { getClientApiKey, getClientMcpApiKey } from '@/lib/clientApiKey'
 
 const API_BASE = '/api'
 
@@ -11,8 +12,7 @@ const api = axios.create({
 
 // Request interceptor — attach API key
 api.interceptors.request.use((config) => {
-  const apiKey = localStorage.getItem('api_key') || 'dev-key'
-  config.headers['X-API-Key'] = apiKey
+  config.headers['X-API-Key'] = getClientApiKey()
   return config
 })
 
@@ -47,8 +47,7 @@ const mcpApi = axios.create({
 })
 
 mcpApi.interceptors.request.use((config) => {
-  const mcpKey = localStorage.getItem('mcp_api_key') || 'dev-mcp-key'
-  config.headers['X-MCP-API-Key'] = mcpKey
+  config.headers['X-MCP-API-Key'] = getClientMcpApiKey()
   return config
 })
 
@@ -151,10 +150,12 @@ export const observabilityApi = {
 
 // --- Market (Real-Time Data) ---
 export const marketApi = {
-  ticker: () => api.get('/market/ticker'),
-  company: (symbol: string) => api.get(`/market/company/${symbol}`),
+  ticker: (symbol: string) => api.get(`/market/ticker?symbol=${symbol}`),
   riskDashboard: () => api.get('/market/risk-dashboard'),
-  brandIntel: () => api.get('/market/brand-intel'),
+  brandIntel: (query: string) => api.post('/market/brand-intel', { query }),
+  supplyChainStocks: (tickers: string[]) => api.post('/market/supply-chain-stocks', tickers),
+  commodityPrices: () => api.post('/market/commodity-prices', []),
+  forexRates: () => api.post('/market/forex-rates', []),
 }
 
 export { api, mcpApi }

@@ -79,7 +79,36 @@ Debate History:
 Agent Consensus Points: {consensus_points}
 Key Disagreements: {disagreements}
 
-Synthesize the final recommendation:
+CRITICAL OUTPUT FORMAT REQUIREMENT:
+You MUST respond with valid JSON containing ALL of these fields:
+{{
+  "executive_summary": "Brief executive summary of the final decision",
+  "final_verdict": "Clear final recommendation and decision",
+  "confidence_assessment": {{
+    "overall": 85,
+    "data_quality": 90,
+    "consensus_level": 80
+  }},
+  "reliable_agents": ["agent1", "agent2", "agent3"],
+  "priority_actions": [
+    {{
+      "action": "Specific action item",
+      "justification": "Why this action is critical",
+      "timeline": "Immediate/30 days/60 days/90 days"
+    }}
+  ],
+  "strategic_roadmap": {{
+    "day30": "Short-term objectives",
+    "day60": "Mid-term objectives", 
+    "day90": "Long-term objectives"
+  }},
+  "unresolved_risks": ["Risk 1", "Risk 2"],
+  "formatted_response": "# Executive Summary\\n\\n[Professional markdown summary]\\n\\n## Final Verdict\\n\\n[Clear recommendation]\\n\\n## Confidence Assessment\\n\\n- **Overall Confidence:** 85%\\n- **Data Quality:** 90%\\n- **Consensus Level:** 80%\\n\\n## Reliable Agents\\n\\n[Agent names]\\n\\n## Priority Actions\\n\\n1. **Action 1** - Justification (Timeline: Immediate)\\n2. **Action 2** - Justification (Timeline: 30 days)\\n\\n## Strategic Roadmap\\n\\n### Day 30\\n[Objectives]\\n\\n### Day 60\\n[Objectives]\\n\\n### Day 90\\n[Objectives]\\n\\n## Unresolved Risks\\n\\n- [Risk 1]\\n- [Risk 2]"
+}}
+
+The "formatted_response" field must contain clean, professional markdown that will be displayed to users. Include proper headings, bullet points, and maintain citations using [1], [2] format when referencing sources.
+
+Synthesize the final recommendation including:
 1. Unified recommendation with priority actions
 2. Confidence-weighted decision rationale
 3. Fallback options (Tier 1: Immediate, Tier 2: Short-term, Tier 3: Strategic)
@@ -421,15 +450,56 @@ class DebateEngine:
         try:
             with (tracer.trace_debate_round(0, phase="synthesis") if tracer else _null_ctx()):
                 response, model_used = await llm_router.invoke_with_fallback("moderator", messages)
+            
+            # Try to parse JSON response first
+            formatted_response = None
+            json_response = None
             recommendation = response.content
-            # Parse confidence and risk from response
-            final_confidence = self._parse_confidence(response.content, last_round.get("round_confidence", 50))
+            
+            try:
+                # Extract JSON from response
+                import json
+                import re
+                json_match = re.search(r'\{[\s\S]*\}', response.content)
+                if json_match:
+                    json_data = json.loads(json_match.group())
+                    
+                    # Extract formatted_response if available
+                    if "formatted_response" in json_data:
+                        formatted_response = json_data["formatted_response"]
+                    
+                    # Extract confidence assessment
+                    if "confidence_assessment" in json_data:
+                        conf_assessment = json_data["confidence_assessment"]
+                        if isinstance(conf_assessment, dict) and "overall" in conf_assessment:
+                            final_confidence = conf_assessment["overall"] / 100.0 if conf_assessment["overall"] > 1 else conf_assessment["overall"]
+                        else:
+                            final_confidence = self._parse_confidence(response.content, last_round.get("round_confidence", 50))
+                    else:
+                        final_confidence = self._parse_confidence(response.content, last_round.get("round_confidence", 50))
+                    
+                    json_response = json_data
+                else:
+                    # Fallback to parsing plain text
+                    final_confidence = self._parse_confidence(response.content, last_round.get("round_confidence", 50))
+                    json_response = {"raw_response": response.content}
+                    
+            except json.JSONDecodeError:
+                # If JSON parsing fails, use raw response
+                final_confidence = self._parse_confidence(response.content, last_round.get("round_confidence", 50))
+                json_response = {"raw_response": response.content}
+                formatted_response = None
+            
             risk_score = self._parse_risk_score(response.content, 50)
+            
         except Exception as e:
             logger.error(f"Final synthesis failed: {e}")
             recommendation = f"Synthesis failed: {e}"
             final_confidence = last_round.get("round_confidence", 0)
             risk_score = 50
+            formatted_response = None
+            json_response = {"error": str(e)}
+            
         latency_ms = (_time.monotonic() - t0) * 1000
         if tracer:
             record_debate_round(state.get("session_id", ""), 0, "synthesis", final_confidence, risk_score, latency_ms)
@@ -443,6 +513,8 @@ class DebateEngine:
             "confidence": final_confidence / 100.0,
             "risk_score": risk_score,
             "recommendation": recommendation,
+            "formatted_response": formatted_response,
+            "json_response": json_response,
             "fallback_options": fallbacks,
             "debate_history": [
                 {"round": r["round_number"], "phase": r["phase"], "confidence": r["round_confidence"]}

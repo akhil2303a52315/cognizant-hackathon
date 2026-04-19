@@ -1,8 +1,8 @@
 import logging
 import asyncio
-import os
 from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect
+from backend.auth_keys import api_keys_list
 from backend.ws.events import EventType, Topic, build_event, subscribe_topic, unsubscribe_topic
 
 logger = logging.getLogger(__name__)
@@ -18,8 +18,8 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, api_key: Optional[str] = None):
         # Validate API key on connect
-        valid_keys = os.getenv("API_KEYS", "dev-key").split(",")
-        if api_key and api_key not in valid_keys:
+        valid_keys = api_keys_list()
+        if api_key and api_key.strip() not in valid_keys:
             await websocket.close(code=4001, reason="Invalid API key")
             logger.warning("WebSocket connection rejected: invalid API key")
             return False
@@ -105,7 +105,8 @@ manager = ConnectionManager()
 
 async def websocket_endpoint(websocket: WebSocket):
     # Extract API key from query params or headers
-    api_key = websocket.query_params.get("api_key") or websocket.headers.get("x-api-key")
+    raw = websocket.query_params.get("api_key") or websocket.headers.get("x-api-key") or ""
+    api_key = raw.strip() or None
 
     connected = await manager.connect(websocket, api_key=api_key)
     if not connected:

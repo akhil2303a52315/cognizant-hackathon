@@ -59,30 +59,70 @@ async def stock_quote(params: dict) -> dict:
     Args:
         symbol: Stock ticker symbol (e.g., 'TSM', 'AAPL', 'INTC')
     """
+    import time
     symbol = params.get("symbol", "AAPL")
     key = _get_key()
+    current_time = time.time()
 
     if not key:
-        return _mock_stock_quote(symbol)
+        return {**_mock_stock_quote(symbol), "timestamp": current_time, "data_freshness": "mock"}
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(f"{FINNHUB_BASE}/quote", params={"symbol": symbol, "token": key})
+            resp.raise_for_status()
             data = resp.json()
 
+        # Check if current price is available and not stale
+        current_price = data.get("c", 0)
+        prev_close = data.get("pc", 0)
+        
+        # Determine data freshness
+        data_freshness = "real_time"
+        is_market_hours = _is_market_hours()
+        
+        # If no current price or it's after hours, mark as stale
+        if current_price == 0 or current_price == prev_close:
+            data_freshness = "market_closed" if not is_market_hours else "stale"
+        
         return {
             "symbol": symbol,
-            "current_price": data.get("c", 0),
+            "current_price": current_price,
             "change": data.get("d", 0),
             "change_percent": data.get("dp", 0),
             "high": data.get("h", 0),
             "low": data.get("l", 0),
             "open": data.get("o", 0),
-            "prev_close": data.get("pc", 0),
+            "prev_close": prev_close,
+            "timestamp": current_time,
+            "data_freshness": data_freshness,
+            "market_hours": is_market_hours,
             "mock": False
         }
-    except Exception:
-        return _mock_stock_quote(symbol)
+    except Exception as e:
+        # Return mock data with error info
+        return {**_mock_stock_quote(symbol), "timestamp": current_time, "data_freshness": "error", "error": str(e)}
+
+
+def _is_market_hours() -> bool:
+    """Check if US market is currently open."""
+    import datetime
+    from datetime import timezone
+    
+    now = datetime.datetime.now(timezone.utc)
+    # Convert to Eastern Time (US market timezone)
+    eastern_tz = datetime.timezone(datetime.timedelta(hours=-5))  # EST
+    eastern_time = now.astimezone(eastern_tz)
+    
+    # Check if it's weekday
+    if eastern_time.weekday() >= 5:  # Saturday (5) or Sunday (6)
+        return False
+    
+    # Market hours: 9:30 AM - 4:00 PM ET
+    market_open = eastern_time.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close = eastern_time.replace(hour=16, minute=0, second=0, microsecond=0)
+    
+    return market_open <= eastern_time <= market_close
 
 
 async def company_profile(params: dict) -> dict:

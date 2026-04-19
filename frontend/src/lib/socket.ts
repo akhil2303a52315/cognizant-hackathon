@@ -1,3 +1,5 @@
+import { getClientApiKey } from '@/lib/clientApiKey'
+
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
 
 type EventHandler = (event: WSEvent) => void
@@ -19,7 +21,7 @@ class WebSocketClient {
   connect(apiKey?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) return
 
-    const key = apiKey || localStorage.getItem('api_key') || 'dev-key'
+    const key = apiKey || getClientApiKey()
     const url = `${WS_URL}?api_key=${encodeURIComponent(key)}`
 
     this.ws = new WebSocket(url)

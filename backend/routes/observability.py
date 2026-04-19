@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from pydantic import BaseModel
 
+from backend.auth_keys import api_keys_list
 from backend.config import settings
 from backend.observability.langsmith_config import (
     metrics, CouncilTracer, generate_prometheus_metrics,
@@ -226,9 +227,8 @@ async def debate_websocket(websocket: WebSocket):
       4. Server sends heartbeat every 30s: {"type": "heartbeat", "ts": ...}
     """
     # Validate API key
-    import os
-    api_key = websocket.query_params.get("api_key") or websocket.headers.get("x-api-key", "")
-    valid_keys = os.getenv("API_KEYS", "dev-key").split(",")
+    api_key = (websocket.query_params.get("api_key") or websocket.headers.get("x-api-key", "")).strip()
+    valid_keys = api_keys_list()
     if api_key and api_key not in valid_keys:
         await websocket.close(code=4001, reason="Invalid API key")
         return
@@ -366,10 +366,10 @@ async def debate_websocket_with_session(websocket: WebSocket, session_id: str):
       3. Server streams debate events (same format as /ws/debate)
       4. Heartbeat every 30s
     """
-    import os
     import uuid
-    api_key = websocket.query_params.get("api_key") or websocket.headers.get("x-api-key", "")
-    valid_keys = os.getenv("API_KEYS", "dev-key").split(",")
+
+    api_key = (websocket.query_params.get("api_key") or websocket.headers.get("x-api-key", "")).strip()
+    valid_keys = api_keys_list()
     if api_key and api_key not in valid_keys:
         await websocket.close(code=4001, reason="Invalid API key")
         return

@@ -1,0 +1,57 @@
+# LLM PROVIDERS
+GROQ_API_KEY=gsk_...
+OPENROUTER_API_KEY=sk-or-v1-...
+NVIDIA_API_KEY=nvapi-...
+GOOGLE_API_KEY=AIza...
+COHERE_API_KEY=...
+SAMBANOVA_API_KEY=...
+
+# DATABASES
+NEON_DATABASE_URL=postgresql://neondb_owner:password@host/neondb?sslmode=require
+REDIS_URL=redis://localhost:6379
+NEO4J_URI=bolt://localhost:7687
+NEO4J_PASSWORD=testpassword
+PINECONE_API_KEY=...
+PINECONE_INDEX_NAME=supplychaingpt
+
+# RAG
+HUGGINGFACE_API_KEY=hf_...
+UNSTRUCTURED_API_KEY=...
+OPENAI_API_KEY=sk-...
+
+# OBSERVABILITY
+LANGCHAIN_TRACING_V2=false
+LANGCHAIN_API_KEY=lsv2_...
+LANGCHAIN_PROJECT=supplychaingpt-council
+
+# EXTERNAL
+NEWSAPI_KEY=...
+
+# APP
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+API_KEYS=dev-key
+MCP_API_KEY=dev-mcp-key
+RATE_LIMIT_PER_MINUTE=60
+MCP_RATE_LIMIT=30
+LOG_LEVEL=INFO
+
+# NEW EXTERNAL DATA APIS (Day 7+)
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
+POLYGON_API_KEY=your_polygon_key
+OPENWEATHERMAP_API_KEY=your_openweathermap_key
+MEDIASTACK_API_KEY=your_mediastack_key
+NOAA_API_KEY=your_noaa_key
+NIST_NVD_API_KEY=your_nist_nvd_key
+CURRENTS_API_KEY=your_currents_key
+
+# ADDITIONAL EXTERNAL DATA APIS
+TWELVEDATA_API_KEY=your_twelvedata_key
+FMP_API_KEY=your_fmp_key
+SHODAN_API_KEY=your_shodan_key
+EXCHANGERATE_API_KEY=your_exchangerate_key
+GNEWS_API_KEY=your_gnews_key
+MARKETAUX_API_KEY=your_marketaux_key
+GRAPHHOPPER_API_KEY=your_graphhopper_key
+
+FIRECRAWL_BASE_URL=http://localhost:3002
+FIRECRAWL_API_KEY=

@@ -101,7 +101,7 @@ def _register_all_tools():
     from backend.mcp.tools.social_tools import register as reg_social
     from backend.mcp.tools.firecrawl_tools import register as reg_firecrawl
     from backend.mcp.tools.gdelt_tools import TOOLS as gdelt_tools
-    from backend.mcp.tools.finnhub_tools import TOOLS as finnhub_tools
+    from backend.mcp.tools.yahoo_finance_tools import TOOLS as yahoo_finance_tools, register as reg_yahoo_finance
     from backend.mcp.tools.fred_tools import TOOLS as fred_tools
     from backend.mcp.tools.frankfurter_tools import TOOLS as frankfurter_tools
     from backend.mcp.tools.weather_tools import TOOLS as weather_tools
@@ -122,13 +122,13 @@ def _register_all_tools():
     from backend.mcp.tools.marketaux_tools import TOOLS as marketaux_tools
     from backend.mcp.tools.graphhopper_tools import TOOLS as graphhopper_tools
 
-    for reg in [reg_news, reg_supplier, reg_shipping, reg_commodity, reg_finance, reg_social, reg_firecrawl]:
+    for reg in [reg_news, reg_supplier, reg_shipping, reg_commodity, reg_finance, reg_social, reg_firecrawl, reg_yahoo_finance]:
         reg()
 
     # Register new real-data MCP tools
     for tool_list, category in [
         (gdelt_tools, "geopolitical"),
-        (finnhub_tools, "financial"),
+        (yahoo_finance_tools, "financial"),
         (fred_tools, "economic"),
         (frankfurter_tools, "forex"),
         (weather_tools, "disaster"),

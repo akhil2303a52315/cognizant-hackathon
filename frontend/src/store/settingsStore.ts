@@ -88,9 +88,24 @@ export const useSettingsStore = create<SettingsState>()(
       isLoaded: false,
 
       updateSettings: (partial) =>
-        set((state) => ({
-          settings: { ...state.settings, ...partial },
-        })),
+        set((state) => {
+          const settings = { ...state.settings, ...partial }
+          if (typeof partial.api_key === 'string') {
+            try {
+              localStorage.setItem('api_key', partial.api_key)
+            } catch {
+              /* ignore quota / private mode */
+            }
+          }
+          if (typeof partial.mcp_api_key === 'string') {
+            try {
+              localStorage.setItem('mcp_api_key', partial.mcp_api_key)
+            } catch {
+              /* ignore */
+            }
+          }
+          return { settings }
+        }),
 
       loadFromApi: (data) =>
         set((state) => ({

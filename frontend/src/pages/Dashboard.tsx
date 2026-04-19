@@ -5,6 +5,9 @@ import { useMarketTicker, useRiskDashboard } from '@/hooks/useMarketQuery'
 import { useSuppliers, useRiskHeatmap, useSystemHealth, useRAGStats, useIngestStatus, useModelsStatus } from '@/hooks/useDashboardData'
 import LoadingSkeleton from '@/components/shared/LoadingSkeleton'
 import AnimatedList from '@/components/ui/AnimatedList'
+import SupplyChainStocksRisk from '@/components/dashboard/SupplyChainStocksRisk'
+import { CommodityPrices } from '@/components/dashboard/CommodityPrices'
+import { ForexRates } from '@/components/dashboard/ForexRates'
 
 type TabId = 'overview' | 'market' | 'risk' | 'supply' | 'system'
 
@@ -32,44 +35,6 @@ function StockCard({ stock }: { stock: Record<string, unknown> }) {
       </div>
       <p className="text-2xl font-bold text-gray-900">${price.toFixed(2)}</p>
       {Boolean(stock.mock) && <p className="text-xs text-amber-600 mt-1 flex items-center gap-1"><Zap className="w-3 h-3" /> Mock data</p>}
-    </div>
-  )
-}
-
-function ForexCard({ forex }: { forex: Record<string, unknown> }) {
-  const rates = (forex.rates || {}) as Record<string, number>
-  const base = String(forex.base || 'USD')
-  const flagMap: Record<string, string> = { EUR: '🇪🇺', CNY: '🇨🇳', JPY: '🇯🇵', TWD: '🇹🇼', KRW: '🇰🇷', GBP: '🇬🇧' }
-  return (
-    <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-card hover:shadow-card-hover transition-all duration-300">
-      <h3 className="text-sm font-semibold text-gray-500 mb-4 flex items-center gap-2">
-        <DollarSign className="w-4 h-4 text-blue-600" /> Forex Rates (1 {base})
-      </h3>
-      <div className="grid grid-cols-3 gap-3">
-        {Object.entries(rates).map(([cur, val]) => (
-          <div key={cur} className="text-center p-2 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors">
-            <span className="text-lg">{flagMap[cur] || '💱'}</span>
-            <p className="text-xs text-gray-500 font-medium">{cur}</p>
-            <p className="text-sm font-bold text-gray-900">{Number(val).toFixed(cur === 'JPY' || cur === 'KRW' ? 1 : 4)}</p>
-          </div>
-        ))}
-      </div>
-      {Boolean(forex.mock) && <p className="text-xs text-amber-600 mt-3 flex items-center gap-1"><Zap className="w-3 h-3" /> Mock</p>}
-    </div>
-  )
-}
-
-function CommodityCard({ commodity }: { commodity: Record<string, unknown> }) {
-  const name = String(commodity.commodity || '???').replace(/_/g, ' ')
-  const price = Number(commodity.price || 0)
-  const source = String(commodity.source || commodity.series_id || '')
-  return (
-    <div className="bg-white rounded-lg p-3.5 border border-gray-200 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium capitalize text-gray-900">{name}</p>
-        <p className="text-xs text-gray-400">{source}</p>
-      </div>
-      <p className="text-lg font-bold text-gray-900">${price.toFixed(2)}</p>
     </div>
   )
 }
@@ -120,8 +85,6 @@ export default function Dashboard() {
   const modelsStatus = useModelsStatus()
 
   const stocks = (ticker.data?.stocks || []) as Array<Record<string, unknown>>
-  const forex = (ticker.data?.forex || {}) as Record<string, unknown>
-  const commodities = (ticker.data?.commodities || []) as Array<Record<string, unknown>>
   const regions = (risk.data?.regions || []) as Array<Record<string, unknown>>
   const disasters = (risk.data?.global_disasters?.alerts || []) as Array<Record<string, unknown>>
   const supplierList = (suppliers.data?.suppliers || []) as Array<Record<string, unknown>>
@@ -321,25 +284,17 @@ export default function Dashboard() {
 
       {/* ── Overview Tab ── */}
       {activeTab === 'overview' && (<>
-        <div className="mb-6 bg-white/60 backdrop-blur-xl rounded-2xl border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5 animate-in-up">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Live Market Ticker</span>
-            {ticker.isFetching && <span className="text-xs text-blue-600 animate-pulse font-medium">Updating...</span>}
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-1">
-            {ticker.isLoading ? <LoadingSkeleton variant="card" count={4} /> : stocks.map((s, i) => <StockCard key={i} stock={s} />)}
-          </div>
+        {/* Forex Rates */}
+        <div className="mb-6 animate-in-up">
+          <ForexRates />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="animate-in-up">{ticker.isLoading ? <LoadingSkeleton variant="card" /> : <ForexCard forex={forex} />}</div>
-          <div className="lg:col-span-2 animate-in-up">
-            <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-card">
-              <h3 className="text-sm font-semibold text-gray-500 mb-4 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-blue-600" /> Commodity Prices</h3>
-              <div className="space-y-2">{ticker.isLoading ? <LoadingSkeleton variant="card" count={2} /> : commodities.map((c, i) => <CommodityCard key={i} commodity={c} />)}</div>
-            </div>
-          </div>
+
+        {/* Commodity Prices */}
+        <div className="mb-6 animate-in-up">
+          <CommodityPrices />
         </div>
+
+        {/* Supply Chain Risk Monitor */}
         <div className="mb-6 animate-in-up">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-800">
             <div className="w-6 h-6 rounded-md bg-red-100 flex items-center justify-center"><Shield className="w-3.5 h-3.5 text-red-600" /></div>
@@ -355,6 +310,13 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+
+        {/* Supply Chain Stocks Risk Widget */}
+        <div className="mb-6 animate-in-up">
+          <SupplyChainStocksRisk />
+        </div>
+
+        {/* Global Disaster Alerts */}
         {disasters.length > 0 && (
           <div className="bg-red-50/50 backdrop-blur-md rounded-2xl p-6 border border-red-200/60 mb-6 animate-in-up">
             <h3 className="text-sm font-black text-red-800 uppercase tracking-wider mb-5 flex items-center gap-2">
@@ -380,14 +342,11 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 mb-3"><div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" /><span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock Prices</span></div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{ticker.isLoading ? <LoadingSkeleton variant="card" count={4} /> : stocks.map((s, i) => <StockCard key={i} stock={s} />)}</div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="animate-in-up">{ticker.isLoading ? <LoadingSkeleton variant="card" /> : <ForexCard forex={forex} />}</div>
-          <div className="animate-in-up">
-            <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-card">
-              <h3 className="text-sm font-semibold text-gray-500 mb-4 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-blue-600" /> Commodity Prices</h3>
-              <div className="space-y-2">{ticker.isLoading ? <LoadingSkeleton variant="card" count={2} /> : commodities.map((c, i) => <CommodityCard key={i} commodity={c} />)}</div>
-            </div>
-          </div>
+        <div className="mb-6 animate-in-up">
+          <ForexRates />
+        </div>
+        <div className="mb-6 animate-in-up">
+          <CommodityPrices />
         </div>
       </>)}
 

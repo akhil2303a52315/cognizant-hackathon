@@ -388,7 +388,7 @@ export default function Debate() {
                     </div>
                     <div className="prose prose-invert max-w-none text-white/80">
                       <CitedMarkdownRenderer 
-                        content={supervisorResult.output} 
+                        content={supervisorResult.formatted_response || supervisorResult.output} 
                         urlMap={citationMaps['supervisor'] || {}}
                         accentColor="#10b981"
                       />
